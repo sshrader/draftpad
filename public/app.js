@@ -473,6 +473,7 @@
       };
     }
     $('sheet-json').textContent = JSON.stringify(cfg, null, 2);
+    document.dispatchEvent(new CustomEvent('draftpad:staged', { detail: { name: name, symbol: sym, preset: fee.preset, vamp: state.vamp } }));
     $('copied').hidden = true;
     $('sheet').hidden = false;
     $('sheet').scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });

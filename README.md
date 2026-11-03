@@ -70,6 +70,18 @@ Every row shows a shortened contract address with a Copy button (the full addres
 
 The side panel has three tabs at the top, Details, Fresh launch and Vamp offer, so the launch form is one tap away. The Vamp offer tab switches the form to a vamp offer. Your token keeps its own name, ticker and artwork, with a "Vamp of X" badge and a listing credit that says it is not affiliated and the original token is unchanged. You set a holder bonus (0 to 15% of supply) and a claim window (7, 14 or 30 days). Holders of the original token opt in to claim, and unclaimed bonus tokens are burned. A comparison table sets the original's liquidity, top holders, authorities, dev holding and fees beside your planned terms, and the staged launch sheet includes all of it. Nothing is deployed. The snapshot, claim and burn mechanics need on-chain programs that are not built yet.
 
+## Devnet launch
+
+Once a launch is staged, the sheet offers **Launch on devnet**: connect Phantom, and the page asks the server for an unsigned token-launch transaction, which your wallet signs and sends. The server holds no keys. It generates the new token's mint keypair, signs with it once, and returns the transaction. Test SOL only; mainnet is refused in code.
+
+It switches on when `devnet/presets.json` exists (made by `npm run presets` in `devnet/`). Without that file the page and server run as before and the button never appears.
+
+- Phantom must be on **Devnet** (Settings, Developer Settings, Testnet Mode), or the transaction will not confirm.
+- Token metadata comes from `/meta.json`, built from the name and ticker in the link. There is no image yet.
+- Optional env vars: `LAUNCH_RPC_URL` (devnet RPC, default the public one), `PUBLIC_URL` (this site's address, if it cannot be worked out from the request).
+- `POST /api/launch/prepare` is limited to 10 requests a minute per address.
+- The wallet library is loaded from a CDN when you press Launch. Before any mainnet use, self-host it with a pinned hash.
+
 ## Next
 
 - Bundled-buy data from a second source, so the last signal can be scored.

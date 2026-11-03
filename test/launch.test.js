@@ -167,3 +167,149 @@ test('server: launching is off without a launcher, and meta.json serves metadata
     assert.equal((await fetch(base + '/meta.json?n=x&s=%3Cb%3E')).status, 400);
   });
 });
+
+// ---- status, pool reads and buys ----
+
+const POOL = 'FWUDZaaBrNJDGVzyTnKRhLgrjUeWU4mJdUvfBUmkxWZa';
+const SIG = '3uQi5xA7Dneip5qac73zDZV4CqysWxAmup8Moy4Rc8L5ro99LVcyeSvYB4GduFNYBJ8yiJJZg8eawjqvkJHJoAHZ';
+
+// A fake chain: one pool at a given fill level, plus a transaction status to report.
+function fakeChain(o) {
+  const opt = Object.assign({ raised: 0, need: 1e9, migrated: 0, poolConfig: CONFIG, sigStatus: null }, o);
+  const seen = { swaps: [], quotes: [] };
+  class PublicKey { constructor(v) { this.v = v; } toBase58() { return this.v; } }
+  class BN { constructor(v) { this.v = v; } toString() { return String(this.v); } }
+  const web3 = {
+    PublicKey,
+    Connection: class {
+      async getLatestBlockhash() { return { blockhash: 'BLOCKHASH' }; }
+      async getSlot() { return 1; }
+      async getSignatureStatuses() { return { value: [opt.sigStatus] }; }
+    }
+  };
+  const sdk = {
+    SwapMode: { ExactIn: 'ExactIn', PartialFill: 'PartialFill' },
+    ActivationType: { Slot: 'Slot', Timestamp: 'Timestamp' },
+    DynamicBondingCurveClient: class {
+      constructor() {
+        this.state = {
+          getPool: async () => (opt.noPool ? null : { config: new PublicKey(opt.poolConfig), quoteReserve: new BN(opt.raised), isMigrated: opt.migrated }),
+          getPoolConfig: async () => ({ migrationQuoteThreshold: new BN(opt.need), activationType: 'Timestamp' })
+        };
+        this.pool = {
+          swapQuote2: p => { seen.quotes.push(p); return { minimumAmountOut: new BN(777) }; },
+          swap2: async p => { seen.swaps.push(p); return { serialize() { return Buffer.from('SWAP-BYTES'); } }; }
+        };
+      }
+    }
+  };
+  return { seen, load: async () => ({ sdk, web3, spl: {}, BN }) };
+}
+const buyer = CREATOR;
+const buyBody = over => Object.assign({ pool: POOL, buyer, sol: 0.1 }, over);
+
+test('status reports pending, confirmed and failed, and rejects junk signatures', async () => {
+  const run = async sigStatus => createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({ sigStatus }).load }).status(SIG, ctx);
+  assert.deepEqual((await run(null)).body, { state: 'pending' });
+  assert.deepEqual((await run({ confirmationStatus: 'processed' })).body, { state: 'pending' });
+  assert.deepEqual((await run({ confirmationStatus: 'confirmed' })).body, { state: 'confirmed' });
+  assert.deepEqual((await run({ confirmationStatus: 'finalized' })).body, { state: 'confirmed' });
+  assert.deepEqual((await run({ confirmationStatus: 'confirmed', err: { InstructionError: [0, 'x'] } })).body, { state: 'failed' });
+  const l = createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain().load });
+  assert.equal((await l.status('short', ctx)).body.error, 'bad_signature');
+  assert.equal((await l.status(null, ctx)).body.error, 'bad_signature');
+  assert.equal((await l.status('0'.repeat(88), ctx)).status, 400);
+});
+
+test('pool read shows curve progress and only serves Draftpad pools', async () => {
+  const l = createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({ raised: 250000000 }).load });
+  const r = await l.pool(POOL, ctx);
+  assert.equal(r.status, 200);
+  assert.equal(r.body.progress, 0.25);
+  assert.equal(r.body.raisedSol, 0.25);
+  assert.equal(r.body.thresholdSol, 1);
+  assert.equal(r.body.preset, 'standard');
+  assert.equal(r.body.curveFull, false);
+  assert.equal(r.body.migrated, false);
+
+  const full = await createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({ raised: 1e9 }).load }).pool(POOL, ctx);
+  assert.equal(full.body.curveFull, true);
+  assert.equal(full.body.progress, 1);
+  const gone = await createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({ migrated: 1 }).load }).pool(POOL, ctx);
+  assert.equal(gone.body.migrated, true);
+  assert.equal(gone.body.curveFull, true);
+
+  const stranger = await createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({ poolConfig: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' }).load }).pool(POOL, ctx);
+  assert.equal(stranger.status, 404);
+  assert.equal(stranger.body.error, 'not_a_draftpad_pool');
+  assert.equal((await createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({ noPool: true }).load }).pool(POOL, ctx)).body.error, 'pool_not_found');
+  assert.equal((await createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain().load }).pool('nope', ctx)).body.error, 'bad_pool');
+});
+
+test('buy prepares an unsigned swap with a quoted minimum, and a partial fill when it would fill the curve', async () => {
+  const chain = fakeChain({ raised: 0 });
+  const l = createLauncher({ presets: PRESETS, logger: quiet, load: chain.load, maxPerMinute: 1000 });
+  const ok = await l.buy(buyBody(), ctx);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.transaction, Buffer.from('SWAP-BYTES').toString('base64'));
+  assert.equal(ok.body.partialFill, false);
+  assert.equal(chain.seen.swaps[0].swapMode, 'ExactIn');
+  assert.equal(chain.seen.swaps[0].amountIn.toString(), '100000000');
+  assert.equal(chain.seen.swaps[0].minimumAmountOut.toString(), '777');
+  assert.equal(chain.seen.swaps[0].owner.toBase58(), buyer);
+  assert.equal(chain.seen.swaps[0].swapBaseForQuote, false);
+
+  const near = fakeChain({ raised: 950000000 });
+  const filling = await createLauncher({ presets: PRESETS, logger: quiet, load: near.load }).buy(buyBody({ sol: 0.1 }), ctx);
+  assert.equal(filling.body.partialFill, true);
+  assert.equal(near.seen.swaps[0].swapMode, 'PartialFill');
+  assert.equal(near.seen.swaps[0].minimumAmountOut.toString(), '0');
+  assert.equal(near.seen.quotes.length, 0);
+});
+
+test('buy rejects bad input, other projects\' pools, full and migrated curves', async () => {
+  const mk = o => createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain(o).load, maxPerMinute: 1000 });
+  const l = mk();
+  assert.equal((await l.buy(buyBody({ pool: 'x' }), ctx)).body.error, 'bad_pool');
+  assert.equal((await l.buy(buyBody({ buyer: 'x' }), ctx)).body.error, 'bad_buyer');
+  for (const sol of [0, 0.001, 6, -1, NaN, 'abc', null]) assert.equal((await l.buy(buyBody({ sol }), ctx)).body.error, 'bad_amount', String(sol));
+  assert.equal((await l.buy('nope', ctx)).body.error, 'bad_pool');
+  assert.equal((await mk({ poolConfig: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB' }).buy(buyBody(), ctx)).body.error, 'not_a_draftpad_pool');
+  assert.equal((await mk({ raised: 1e9 }).buy(buyBody(), ctx)).body.error, 'curve_full');
+  assert.equal((await mk({ migrated: 1 }).buy(buyBody(), ctx)).body.error, 'migrated');
+  assert.equal((await mk({ noPool: true }).buy(buyBody(), ctx)).status, 404);
+});
+
+test('buys are rate limited, and chain failures give a generic error', async () => {
+  const l = createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain().load, maxPerMinute: 1 });
+  assert.equal((await l.buy(buyBody(), ctx)).status, 200);
+  assert.equal((await l.buy(buyBody(), ctx)).status, 429);
+  const broken = createLauncher({ presets: PRESETS, logger: quiet, load: async () => { throw new Error('rpc secret'); } });
+  assert.deepEqual((await broken.buy(buyBody(), ctx)).body, { error: 'prepare_failed' });
+  assert.deepEqual((await broken.pool(POOL, ctx)).body, { error: 'pool_read_failed' });
+  assert.deepEqual((await broken.status(SIG, ctx)).body, { error: 'status_failed' });
+});
+
+test('server: status, pool and buy routes', async () => {
+  const launcher = createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({ raised: 500000000, sigStatus: { confirmationStatus: 'confirmed' } }).load });
+  await withServer({ feed, launcher }, async base => {
+    assert.deepEqual(await (await fetch(base + '/api/launch/status?sig=' + SIG)).json(), { state: 'confirmed' });
+    assert.equal((await fetch(base + '/api/launch/status?sig=bad')).status, 400);
+    const pr = await fetch(base + '/api/launch/pool?address=' + POOL);
+    assert.equal(pr.status, 200);
+    assert.equal(pr.headers.get('cache-control'), 'no-store');
+    assert.equal((await pr.json()).progress, 0.5);
+    assert.equal((await fetch(base + '/api/launch/pool')).status, 400);
+    const buy = await fetch(base + '/api/launch/buy', { method: 'POST', body: JSON.stringify(buyBody()) });
+    assert.equal(buy.status, 200);
+    assert.match((await buy.json()).transaction, /^[A-Za-z0-9+/=]+$/);
+    assert.equal((await fetch(base + '/api/launch/buy', { method: 'POST', body: '{nope' })).status, 400);
+    assert.equal((await fetch(base + '/api/launch/buy')).status, 404);
+    assert.equal((await fetch(base + '/api/launch/status', { method: 'POST' })).status, 405);
+  });
+  await withServer({ feed }, async base => {
+    assert.equal((await fetch(base + '/api/launch/status?sig=' + SIG)).status, 503);
+    assert.equal((await fetch(base + '/api/launch/pool?address=' + POOL)).status, 503);
+    assert.equal((await fetch(base + '/api/launch/buy', { method: 'POST', body: '{}' })).status, 503);
+  });
+});

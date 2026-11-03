@@ -82,6 +82,10 @@ It switches on when `devnet/presets.json` exists (made by `npm run presets` in `
 - `POST /api/launch/prepare` is limited to 10 requests a minute per address.
 - The wallet library is loaded from a CDN when you press Launch. Before any mainnet use, self-host it with a pinned hash.
 
+### Confirmation and trading
+
+After Phantom sends the launch, the page polls `GET /api/launch/status?sig=` until devnet confirms it (or it fails), then shows "Confirmed on devnet". A **Trade a devnet launch** card then opens with the new pool loaded. You can also paste any Draftpad pool address into it: `GET /api/launch/pool?address=` shows how full the curve is, and **Buy** (0.01 to 5 SOL) calls `POST /api/launch/buy`, which returns an unsigned swap for your wallet to sign. Pools from other projects are refused, as are buys on a full or migrated curve. A buy that would fill the curve is sent as a partial fill with no minimum output, which is a devnet-only workaround and must be removed before mainnet. Lookups are limited to 120 a minute and buys to 10 a minute per address.
+
 ## Next
 
 - Bundled-buy data from a second source, so the last signal can be scored.

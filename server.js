@@ -80,12 +80,13 @@ function createApp(opts) {
     }
 
     // The one POST route: asks the server to prepare an unsigned launch transaction.
-    if (req.method === 'POST' && pathname === '/api/launch/prepare') {
+    if (req.method === 'POST' && (pathname === '/api/launch/prepare' || pathname === '/api/launch/buy')) {
+      const action = pathname === '/api/launch/buy' ? 'buy' : 'prepare';
       const noStore = Object.assign({}, JSON_TYPE, { 'Cache-Control': 'no-store', Connection: 'close' });
       if (!launcher) return send(res, 503, JSON.stringify({ error: 'launch_unavailable' }), noStore);
       readJson(req, 4096).then(body => {
         if (!body) return send(res, 400, JSON.stringify({ error: 'bad_request' }), noStore);
-        return launcher.prepare(body, { ip: clientIp(req), baseUrl: baseUrlFor(req) })
+        return launcher[action](body, { ip: clientIp(req), baseUrl: baseUrlFor(req) })
           .then(r => send(res, r.status, JSON.stringify(r.body), noStore));
       }).catch(() => send(res, 500, JSON.stringify({ error: 'server_error' }), noStore));
       return;
@@ -99,6 +100,17 @@ function createApp(opts) {
     if (pathname === '/api/launch/config') {
       const info = launcher ? launcher.info() : { enabled: false, cluster: 'devnet', presets: [] };
       return send(res, 200, JSON.stringify(info), Object.assign({}, JSON_TYPE, { 'Cache-Control': 'no-store' }));
+    }
+
+    // Read-only chain lookups for the page: did a transaction land, and where does a curve stand.
+    if (pathname === '/api/launch/status' || pathname === '/api/launch/pool') {
+      const noStore = Object.assign({}, JSON_TYPE, { 'Cache-Control': 'no-store' });
+      if (!launcher) return send(res, 503, JSON.stringify({ error: 'launch_unavailable' }), noStore);
+      const ctx = { ip: clientIp(req) };
+      const run = pathname === '/api/launch/status' ? launcher.status(url.searchParams.get('sig'), ctx) : launcher.pool(url.searchParams.get('address'), ctx);
+      run.then(r => send(res, r.status, req.method === 'HEAD' ? '' : JSON.stringify(r.body), noStore))
+        .catch(() => send(res, 500, JSON.stringify({ error: 'server_error' }), noStore));
+      return;
     }
 
     // Token metadata read by wallets and explorers. Built from the link, nothing stored.

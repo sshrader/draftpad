@@ -1,12 +1,11 @@
 /* Devnet launch, page side. After a launch is staged, this connects the creator's wallet, asks the
-   server for an unsigned token-launch transaction, and has the wallet sign and send it. The page
-   never sees a private key. Devnet only. */
+   server for an unsigned token-launch transaction, and has the wallet sign and send it, then waits
+   for the result. The page never sees a private key. Devnet only. */
 (function () {
   'use strict';
 
   const $ = id => document.getElementById(id);
-  const WEB3_URL = 'https://cdn.jsdelivr.net/npm/@solana/web3.js@1.98.0/lib/index.iife.min.js';
-  const L = window.DraftpadLogic;
+  const W = window.DraftpadWallet;
 
   let enabled = false;
   let offered = [];
@@ -14,28 +13,10 @@
   let wallet = null; // base58 address once connected
   let busy = false;
 
-  function provider() {
-    const p = window.phantom && window.phantom.solana;
-    if (p && p.isPhantom) return p;
-    if (window.solana && window.solana.isPhantom) return window.solana;
-    return null;
-  }
-
   function say(text, bad) {
     const el = $('dl-status');
     el.textContent = text;
     el.className = 'dl-status' + (bad ? ' bad' : '');
-  }
-
-  function loadWeb3() {
-    if (window.solanaWeb3) return Promise.resolve();
-    return new Promise((resolve, reject) => {
-      const s = document.createElement('script');
-      s.src = WEB3_URL;
-      s.onload = () => (window.solanaWeb3 ? resolve() : reject(new Error('web3 missing')));
-      s.onerror = () => reject(new Error('Could not load the wallet library.'));
-      document.head.appendChild(s);
-    });
   }
 
   function render() {
@@ -48,19 +29,20 @@
     $('dl-connect').disabled = busy;
   }
 
+  function strip(label, value) {
+    const d = document.createElement('div');
+    d.className = 'castrip';
+    const l = document.createElement('span'); l.className = 'calab'; l.textContent = label;
+    const c = document.createElement('code'); c.className = 'cavalue'; c.textContent = value;
+    const b = document.createElement('button'); b.type = 'button'; b.className = 'ca-copy'; b.dataset.ca = value; b.textContent = 'Copy';
+    b.setAttribute('aria-label', 'Copy ' + label);
+    d.appendChild(l); d.appendChild(c); d.appendChild(b);
+    return d;
+  }
+
   function showResult(r, signature) {
     const box = $('dl-result');
     box.innerHTML = '';
-    const strip = (label, value) => {
-      const d = document.createElement('div');
-      d.className = 'castrip';
-      const l = document.createElement('span'); l.className = 'calab'; l.textContent = label;
-      const c = document.createElement('code'); c.className = 'cavalue'; c.textContent = value;
-      const b = document.createElement('button'); b.type = 'button'; b.className = 'ca-copy'; b.dataset.ca = value; b.textContent = 'Copy';
-      b.setAttribute('aria-label', 'Copy ' + label);
-      d.appendChild(l); d.appendChild(c); d.appendChild(b);
-      return d;
-    };
     box.appendChild(strip('MINT', r.mint));
     box.appendChild(strip('POOL', r.pool));
     const links = document.createElement('div');
@@ -76,25 +58,18 @@
   }
 
   async function connect() {
-    const p = provider();
-    if (!p) {
-      say('No Phantom wallet found. Install Phantom, switch it to Devnet (Settings, Developer Settings, Testnet Mode), then reload.', true);
-      return;
-    }
     busy = true; render();
     try {
-      const res = await p.connect();
-      wallet = String(res && res.publicKey ? res.publicKey : p.publicKey);
+      wallet = await W.connect();
       say('Connected ' + wallet.slice(0, 4) + '…' + wallet.slice(-4) + '. Phantom must be set to Devnet.');
     } catch (err) {
-      say('Wallet connection was not approved.', true);
+      say(err && err.code === 'no_wallet' ? W.NO_WALLET : 'Wallet connection was not approved.', true);
     }
     busy = false; render();
   }
 
   async function launch() {
-    const p = provider();
-    if (!p || !wallet || !staged || busy) return;
+    if (!wallet || !staged || busy) return;
     busy = true; render();
     $('dl-result').hidden = true;
     try {
@@ -110,17 +85,24 @@
         busy = false; render();
         return;
       }
-      await loadWeb3();
-      const bytes = Uint8Array.from(atob(data.transaction), c => c.charCodeAt(0));
-      const tx = window.solanaWeb3.Transaction.from(bytes);
       say('Approve the transaction in your wallet…');
-      const sent = await p.signAndSendTransaction(tx);
-      const signature = sent && sent.signature ? sent.signature : String(sent);
-      say('Sent. Devnet usually confirms within a few seconds.');
+      const signature = await W.signAndSend(data.transaction);
       showResult(data, signature);
+      say('Sent. Waiting for devnet to confirm…');
+      const state = await W.confirm(signature);
+      if (state === 'confirmed') {
+        say('Confirmed on devnet ✓ Your token is live. Trade it in the card below the list.');
+        document.dispatchEvent(new CustomEvent('draftpad:launched', { detail: { pool: data.pool } }));
+      } else if (state === 'failed') {
+        say('The transaction failed on-chain. Check the transaction link for the reason. Nothing was created.', true);
+      } else {
+        say('Not confirmed yet. Check the transaction link in a minute.', true);
+      }
     } catch (err) {
       const m = err && err.message ? String(err.message) : '';
-      say(/reject|denied|cancel/i.test(m) ? 'You declined the transaction.' : 'The launch did not go through. Check that your wallet is on Devnet and has test SOL.', true);
+      say(err && err.code === 'no_wallet' ? W.NO_WALLET
+        : /reject|denied|cancel/i.test(m) ? 'You declined the transaction.'
+        : 'The launch did not go through. Check that your wallet is on Devnet and has test SOL.', true);
     }
     busy = false; render();
   }
@@ -138,7 +120,7 @@
   fetch('/api/launch/config', { headers: { Accept: 'application/json' } })
     .then(r => r.json())
     .then(info => {
-      enabled = Boolean(info && info.enabled && L && Array.isArray(info.presets));
+      enabled = Boolean(info && info.enabled && Array.isArray(info.presets));
       offered = enabled ? info.presets : [];
       render();
     })

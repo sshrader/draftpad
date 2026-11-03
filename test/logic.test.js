@@ -36,6 +36,17 @@ test('momentum compares the last 6 hours with the 18 before and caps at 99', () 
   assert.equal(L.momentum({ h24: 500 }), null);
 });
 
+test('fast momentum compares the last hour with the average of the 5 before', () => {
+  assert.equal(L.momentumFast({ h1: 300, h6: 800 }), 3);
+  assert.equal(L.momentumFast({ h1: 100, h6: 100 }), 99);
+  assert.equal(L.momentumFast({ h1: 0, h6: 0 }), null);
+  assert.equal(L.momentumFast({ h6: 500 }), null);
+  assert.equal(L.momentumFast(null), null);
+  const t = { buyers: null, top10: null, bundled: null, win: { h1: 300, h6: 800, h24: 900 } };
+  assert.equal(L.computeScore(t, { fast: true }).ratio, 3);
+  assert.equal(L.computeScore(t).ratio, L.momentum(t.win));
+});
+
 test('missing signals are left out and the total is scaled over the rest', () => {
   const t = { buyers: 5000, top10: 20, bundled: null, win: { h6: 300, h24: 600 } };
   const sc = L.computeScore(t);

@@ -8,7 +8,7 @@
 // its most-traded list and its newest listings, then drops duplicates. A single ranking
 // is mostly established tokens, and the merged pool is what surfaces fresh launches.
 
-const WINDOWS = ['1h', '6h', '24h'];
+const WINDOWS = ['5m', '1h', '6h', '24h'];
 const SOURCES = [
   { name: 'toptrending', path: w => '/tokens/v2/toptrending/' + w + '?limit=100' },
   { name: 'toptraded', path: w => '/tokens/v2/toptraded/' + w + '?limit=100' },

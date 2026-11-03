@@ -11,17 +11,18 @@
 
   const PLATFORM_FEE = 0.5;
   const REFRESH_MS = 5 * 60 * 1000;
-  const WIN_LABEL = { '1h': '1 hour', '6h': '6 hours', '24h': '24 hours' };
+  const WIN_LABEL = { '5m': '5 minutes', '1h': '1 hour', '6h': '6 hours', '24h': '24 hours' };
   // Jupiter's organic-buyer counts are small. These are the counts that earn full marks per window.
-  const LIVE_BUYERS_FULL = { '1h': 60, '6h': 200, '24h': 500 };
+  const LIVE_BUYERS_FULL = { '5m': 20, '1h': 60, '6h': 200, '24h': 500 };
   const STATUS = { pass: ['pass', '● GO'], watch: ['watch', '▲ HOLD'], fail: ['fail', '✕ NO-GO'] };
   const CHECK_TAG = { pass: 'PASS', watch: 'WATCH', fail: 'FAIL', na: 'N/A' };
 
-  const state = { f: { minLiq: 25000, minAge: 6, maxTop10: 45, maxBundled: 20, needRevoked: true }, maxAge: 168, win: '24h', sort: 'score', sel: null, vamp: false };
+  const state = { f: { minLiq: 25000, minAge: 1, maxTop10: 45, maxBundled: 20, needRevoked: true }, maxAge: 168, win: '1h', sort: 'score', sel: null, vamp: false };
   let TOKENS = SAMPLE;
   let mode = 'sample';
   let view = { top: [], passing: [], held: [], tooOld: 0 };
   let loadSeq = 0;
+  let ageTouched = false;
 
   /* ---------- Data ---------- */
   // Which window the numbers describe: sample data is always 24h.
@@ -30,7 +31,7 @@
 
   function compute() {
     const inScope = TOKENS.filter(t => withinAge(t, state.maxAge));
-    const sc = { buyersFull: buyersFull() };
+    const sc = { buyersFull: buyersFull(), fast: mode === 'live' };
     const rows = inScope.map(t => ({ t, ev: evaluate(t, state.f), sc: computeScore(t, sc) }));
     const key = {
       score: r => r.sc.total,
@@ -142,6 +143,7 @@
       if (o.value === 'buyers') o.textContent = 'Unique buyers';
     }
     $('how-buyers').textContent = count(buyersFull());
+    $('how-mom').textContent = liveMode ? 'the last hour against the 5 before, since live tokens fade fast' : 'the last 6 hours against the 18 before';
   }
 
   /* ---------- Pad panel ---------- */
@@ -301,6 +303,7 @@
     $('o-bun').textContent = state.f.maxBundled + '%';
     renderAll();
   }
+  $('c-maxage').addEventListener('input', () => { ageTouched = true; });
   ['c-liq', 'c-age', 'c-maxage', 'c-top', 'c-bun', 'c-auth', 'c-sort'].forEach(id => $(id).addEventListener('input', readFilters));
 
   $('rows').addEventListener('click', e => {
@@ -360,6 +363,12 @@
       mode = 'sample';
       setFeedUi('Sample data · 15 fictional tokens', false);
       $('foot').textContent = sampleNote(r.why);
+    }
+    // Until the person picks one, live data defaults to tokens under a day old and sample data to a week.
+    if (!ageTouched) {
+      const v = mode === 'live' ? '24' : '168';
+      $('c-maxage').value = v;
+      state.maxAge = +v;
     }
     compute();
     renderBoard();
@@ -480,6 +489,7 @@
   });
 
   /* ---------- Start ---------- */
+  $('c-maxage').value = String(state.maxAge);
   setFeedUi('Loading live feed…', false);
   $('foot').textContent = '';
   renderAll();

@@ -55,7 +55,7 @@ function createApp(opts) {
 
     // Trending tokens, cached server-side so the upstream API key stays private.
     if (pathname === '/api/trending') {
-      const win = url.searchParams.get('window') || '24h';
+      const win = url.searchParams.get('window') || '1h';
       if (WINDOWS.indexOf(win) === -1) {
         return send(res, 400, JSON.stringify({ error: 'bad_window' }), JSON_TYPE);
       }

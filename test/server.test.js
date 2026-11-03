@@ -40,7 +40,7 @@ test('/api/trending passes the window through and sets cache headers', async () 
     assert.equal((await res.json()).window, '1h');
     assert.equal(res.headers.get('cache-control'), 'public, max-age=30');
     const def = await (await fetch(base + '/api/trending')).json();
-    assert.equal(def.window, '24h');
+    assert.equal(def.window, '1h');
   });
 });
 

@@ -46,6 +46,14 @@
     return Math.min(99, (win.h6 / 6) / (prior / 18));
   }
 
+  // Faster read for live tokens, which fade in hours: the last hour against the average of the 5 before.
+  function momentumFast(win) {
+    if (!win || !isNum(win.h1) || !isNum(win.h6)) return null;
+    const prior = win.h6 - win.h1;
+    if (prior <= 0) return win.h1 > 0 ? 99 : null;
+    return Math.min(99, win.h1 / (prior / 5));
+  }
+
   const WEIGHTS = { buyers: 35, momentum: 30, spread: 20, clean: 15 };
 
   // Signals with no data are left out and the total is scaled over the weight that remains.
@@ -53,7 +61,7 @@
   const BUYERS_FULL = 5000;
   function computeScore(t, opts) {
     const full = opts && isNum(opts.buyersFull) && opts.buyersFull > 0 ? opts.buyersFull : BUYERS_FULL;
-    const ratio = momentum(t.win);
+    const ratio = opts && opts.fast ? momentumFast(t.win) : momentum(t.win);
     const parts = {
       buyers: isNum(t.buyers) ? clamp(t.buyers / full) * WEIGHTS.buyers : null,
       momentum: ratio === null ? null : clamp((ratio - 0.5) / 2.5) * WEIGHTS.momentum,
@@ -150,5 +158,5 @@
     return lev(a, b) <= tol;
   }
 
-  return { isNum, clamp, money, count, pct, ageLabel, esc, windowsFromSeries, momentum, WEIGHTS, BUYERS_FULL, computeScore, evaluate, withinAge, isMint, vampTerms, tooClose };
+  return { isNum, clamp, money, count, pct, ageLabel, esc, windowsFromSeries, momentum, momentumFast, WEIGHTS, BUYERS_FULL, computeScore, evaluate, withinAge, isMint, vampTerms, tooClose };
 });

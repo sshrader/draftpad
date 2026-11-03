@@ -25,7 +25,7 @@ The server calls Jupiter's Tokens API v2 (`/tokens/v2/toptrending/24h`), keeps t
 | `JUPITER_BASE` | Override the API base URL, default `https://api.jup.ag`. |
 | `PORT` | Set by Railway. |
 
-`/healthz` returns `{"ok":true,"liveFeed":true}` so you can confirm the key is set without exposing it. `/api/trending?window=1h|6h|24h` (default `24h`) returns the candidate pool for that window. Each pool merges Jupiter's trending list, its most-traded list and its newest listings (up to 100 each), then drops duplicates, so fresh launches are not buried under older tokens. The page's 1H / 6H / 24H toggle drives it, and the Maximum age filter (default 7 days) keeps the board to young tokens.
+`/healthz` returns `{"ok":true,"liveFeed":true}` so you can confirm the key is set without exposing it. `/api/trending?window=5m|1h|6h|24h` (default `1h`) returns the candidate pool for that window. Each pool merges Jupiter's trending list, its most-traded list and its newest listings (up to 100 each), then drops duplicates, so fresh launches are not buried under older tokens. The page's 5M / 1H / 6H / 24H toggle drives it. Meme coins fade in hours, so the defaults are fast: the 1H window, a Maximum age of 24 hours (sample data keeps 7 days), and a Minimum age of 1 hour. Live momentum compares the last hour with the 5 before it.
 
 What the feed provides and what it does not:
 

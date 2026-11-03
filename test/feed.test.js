@@ -48,6 +48,13 @@ test('normalizeToken reads headline numbers from the chosen window and keeps all
   assert.equal(normalizeToken(rawToken({ stats1h: undefined }), NOW, '1h'), null);
 });
 
+test('normalizeToken can read the 5 minute window', () => {
+  const t = normalizeToken(rawToken({ stats5m: { buyVolume: 700, sellVolume: 300, priceChange: 4, numOrganicBuyers: 9 } }), NOW, '5m');
+  assert.equal(t.vol, 1000);
+  assert.equal(t.buyers, 9);
+  assert.equal(normalizeToken(rawToken(), NOW, '5m'), null);
+});
+
 test('normalizeToken falls back to the token creation time when there is no pool time', () => {
   const t = normalizeToken(rawToken({ firstPool: null }), NOW);
   assert.equal(Math.round(t.ageH), 33 * 24 + 12);
@@ -214,5 +221,5 @@ test('end to end against a local mock of the Jupiter API', async () => {
 });
 
 test('windows are whitelisted', () => {
-  assert.deepEqual(WINDOWS, ['1h', '6h', '24h']);
+  assert.deepEqual(WINDOWS, ['5m', '1h', '6h', '24h']);
 });

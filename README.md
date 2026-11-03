@@ -68,7 +68,7 @@ Fixed checks that are not sliders: tokens Jupiter flags as suspicious fail, a de
 
 Every row shows a shortened contract address with a Copy button (the full address goes to the clipboard) and a Solscan link. Sample tokens have no address, so they say so.
 
-**Vamp this token** switches the launch form to a vamp offer. Your token keeps its own name, ticker and artwork, with a "Vamp of X" badge and a listing credit that says it is not affiliated and the original token is unchanged. You set a holder bonus (0 to 15% of supply) and a claim window (7, 14 or 30 days). Holders of the original token opt in to claim, and unclaimed bonus tokens are burned. A comparison table sets the original's liquidity, top holders, authorities, dev holding and fees beside your planned terms, and the staged launch sheet includes all of it. Nothing is deployed. The snapshot, claim and burn mechanics need on-chain programs that are not built yet.
+The side panel has three tabs at the top, Details, Fresh launch and Vamp offer, so the launch form is one tap away. The Vamp offer tab switches the form to a vamp offer. Your token keeps its own name, ticker and artwork, with a "Vamp of X" badge and a listing credit that says it is not affiliated and the original token is unchanged. You set a holder bonus (0 to 15% of supply) and a claim window (7, 14 or 30 days). Holders of the original token opt in to claim, and unclaimed bonus tokens are burned. A comparison table sets the original's liquidity, top holders, authorities, dev holding and fees beside your planned terms, and the staged launch sheet includes all of it. Nothing is deployed. The snapshot, claim and burn mechanics need on-chain programs that are not built yet.
 
 ## Next
 

@@ -17,7 +17,7 @@
   const STATUS = { pass: ['pass', '● GO'], watch: ['watch', '▲ HOLD'], fail: ['fail', '✕ NO-GO'] };
   const CHECK_TAG = { pass: 'PASS', watch: 'WATCH', fail: 'FAIL', na: 'N/A' };
 
-  const state = { f: { minLiq: 25000, minAge: 1, maxTop10: 45, maxBundled: 20, needRevoked: true }, maxAge: 168, win: '1h', sort: 'score', sel: null, vamp: false };
+  const state = { f: { minLiq: 25000, minAge: 1, maxTop10: 45, maxBundled: 20, needRevoked: true }, maxAge: 168, win: '1h', sort: 'score', sel: null, vamp: false, tab: 'details' };
   let TOKENS = SAMPLE;
   let mode = 'sample';
   let view = { top: [], passing: [], held: [], tooOld: 0 };
@@ -248,11 +248,12 @@
     if (!r) return;
     const t = r.t;
     const v = state.vamp;
-    Array.from(document.querySelectorAll('#vmode button')).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === (v ? 'vamp' : 'fresh'))));
+    Array.from(document.querySelectorAll('#ptabs button')).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.tab === state.tab)));
+    $('p-details').hidden = state.tab !== 'details';
+    $('p-launch').hidden = state.tab === 'details';
     $('vamp').hidden = !v;
     $('v-badge').hidden = !v;
     $('v-badge').textContent = 'Vamp of ' + t.name;
-    $('vamp-go').hidden = v;
     $('o-bonus').textContent = $('f-bonus').value + '%';
     $('l-hint').textContent = v
       ? 'Your token keeps its own name, ticker and artwork. The offer gives holders of ' + t.name + ' a reason to move, and they choose whether to.'
@@ -267,20 +268,15 @@
     }
   }
 
-  function setMode(vamp, scroll) {
-    state.vamp = vamp;
+  // The panel has three views, so the launch form is one tap from the top instead of a scroll away.
+  $('ptabs').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    state.tab = b.dataset.tab;
+    state.vamp = state.tab === 'vamp';
     $('sheet').hidden = true;
     renderVamp();
-    if (scroll) {
-      const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      $('launch').scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
-    }
-  }
-  $('vmode').addEventListener('click', e => {
-    const b = e.target.closest('button');
-    if (b) setMode(b.dataset.mode === 'vamp', false);
   });
-  $('vamp-go').addEventListener('click', () => setMode(true, true));
   ['f-fee', 'f-cap', 'f-vest', 'f-vestd', 'f-bonus', 'f-claim'].forEach(id => $(id).addEventListener('input', () => renderVamp()));
   $('f-vest').addEventListener('change', () => renderVamp());
 

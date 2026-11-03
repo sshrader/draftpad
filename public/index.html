@@ -102,7 +102,8 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
 /* Vamp offer */
 .modebar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
 .vbadge { font: 500 11px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--xenon); border: 1px solid var(--xenon); border-radius: 2px; padding: 5px 8px; overflow-wrap: anywhere; min-width: 0; }
-.vamp-go { width: 100%; margin-top: 12px; }
+.tabs { display: flex; width: 100%; margin-top: 12px; }
+.tabs button { flex: 1; padding: 10px 6px; }
 .vamp { border: 1px solid var(--xenon-dim); border-radius: 4px; padding: 12px; margin-bottom: 14px; background: #0e1a26; }
 .vh { margin: 0 0 6px; font: 800 1.1rem/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; }
 .hint.small { font-size: 12px; margin-bottom: 10px; }
@@ -287,8 +288,13 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
           <h2 id="p-name"></h2>
           <p id="p-sub"></p>
           <div id="p-ca"></div>
-          <button type="button" class="go-btn vamp-go" id="vamp-go">Vamp this token</button>
+          <div class="seg tabs" id="ptabs" role="group" aria-label="Pad view">
+            <button type="button" data-tab="details" aria-pressed="true">Details</button>
+            <button type="button" data-tab="fresh" aria-pressed="false">Fresh launch</button>
+            <button type="button" data-tab="vamp" aria-pressed="false">Vamp offer</button>
+          </div>
         </div>
+        <div id="p-details">
         <section>
           <h3 class="label" id="p-spark-title">Hourly volume, last 24h</h3>
           <div id="p-spark"></div>
@@ -302,14 +308,11 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
           <h3 class="label">Range safety checks</h3>
           <ul id="p-checks"></ul>
         </section>
-        <section>
+        </div>
+        <section id="p-launch" hidden>
           <form id="launch" novalidate>
             <h3 class="label">Launch inspired by <span id="l-src"></span></h3>
             <div class="modebar">
-              <div class="seg" id="vmode" role="group" aria-label="Launch type">
-                <button type="button" data-mode="fresh" aria-pressed="true">Fresh launch</button>
-                <button type="button" data-mode="vamp" aria-pressed="false">Vamp offer</button>
-              </div>
               <span class="vbadge" id="v-badge" hidden></span>
             </div>
             <p class="hint" id="l-hint">Pick your own name, ticker and artwork, then set your own fees and pairing. The original token's identity is not reused.</p>

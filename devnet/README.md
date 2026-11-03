@@ -28,7 +28,7 @@ Fund both addresses at https://faucet.solana.com (pick devnet). The partner wall
 npm run config    # builds the curve and creates the config
 npm run pool      # launches a test token (--name, --symbol, --uri to change it)
 npm run buy       # buys 1 SOL at a time until the curve is full (--step, --max)
-npm run migrate
+npm run migrate   # add: -- --pool <address> for a pool launched from the website
 npm run claim     # shows fees earned on the curve and claims the platform and creator shares
 ```
 

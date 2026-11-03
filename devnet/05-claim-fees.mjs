@@ -6,15 +6,16 @@
 // the DAMM v2 pool's locked liquidity position, which is a separate step.
 import BN from 'bn.js';
 import { PublicKey } from '@solana/web3.js';
-import { client, connection, loadKey, send, readState, sol } from './lib.mjs';
+import { client, connection, loadKey, send, readState, sol, arg } from './lib.mjs';
 
 const state = readState();
-if (!state.pool) { console.error('No pool yet. Run the earlier steps first.'); process.exit(1); }
+const poolAddress = arg('pool', state.pool);
+if (!poolAddress) { console.error('No pool yet. Run the earlier steps first, or pass --pool <address>.'); process.exit(1); }
 
 const partnerWallet = loadKey('partner');
 const creatorName = state.creator || 'partner';
 const creatorWallet = loadKey(creatorName);
-const pool = new PublicKey(state.pool);
+const pool = new PublicKey(poolAddress);
 const { dbc } = await client();
 const MAX = new BN('18446744073709551615');
 

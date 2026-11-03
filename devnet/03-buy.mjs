@@ -39,16 +39,24 @@ for (let i = 1; i <= maxBuys; i++) {
     ? new BN(await connection.getSlot())
     : new BN(Math.floor(Date.now() / 1000));
 
-  const quote = dbc.pool.swapQuote2({
-    virtualPool: p.v, config: p.cfg, swapBaseForQuote: false, swapMode,
-    amountIn, slippageBps: 300, hasReferral: false,
-    eligibleForFirstSwapWithMinFee: false, currentPoint
-  });
+  // The SDK's partial-fill quote failed on its own (TypeError inside beginSwapQuote), so the buy that
+  // crosses the threshold skips the quote and accepts any output. Fine on devnet; never do this on mainnet.
+  let minimumAmountOut;
+  if (crossing) {
+    minimumAmountOut = new BN(0);
+  } else {
+    const quote = dbc.pool.swapQuote2({
+      virtualPool: p.v, config: p.cfg, swapBaseForQuote: false, swapMode,
+      amountIn, slippageBps: 300, hasReferral: false,
+      eligibleForFirstSwapWithMinFee: false, currentPoint
+    });
+    minimumAmountOut = quote.minimumAmountOut;
+  }
 
   const tx = await dbc.pool.swap2({
     owner: buyer.publicKey, payer: buyer.publicKey, pool,
     swapBaseForQuote: false, swapMode, amountIn,
-    minimumAmountOut: quote.minimumAmountOut, referralTokenAccount: null
+    minimumAmountOut, referralTokenAccount: null
   });
   await send(tx, [buyer], 'buy ' + i + (crossing ? ' (partial fill)' : ''));
 }

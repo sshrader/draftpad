@@ -67,3 +67,20 @@ npm run claim
 ```
 
 Expected: the fee breakdown shows the creator at 40% of the total (the first run used 37%), and the claim script prints separate balance changes for the two wallets. The wallet cap in the sheet is reported as not applied.
+
+## Fee presets (what the real launch flow will use)
+
+The page offers three fee presets: Low fee (0.5%, creator keeps 25%), Standard (1%, 40%) and Creator-first (2%, 60%). Each needs one config on-chain, created once and shared by every launch that picks it.
+
+```powershell
+$env:THRESHOLD_SOL = "1"
+npm run presets
+```
+
+This creates the three configs and saves their addresses in `devnet/presets.json` (public addresses, safe to commit). The launch fee decays from 25% (`START_FEE_BPS`, default 2500) to the preset's steady fee. Re-running skips presets that already exist. Then commit and push the file so the server can read it:
+
+```powershell
+git add devnet/presets.json
+git commit -m "Add devnet fee preset configs"
+git push
+```

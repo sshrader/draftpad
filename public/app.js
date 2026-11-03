@@ -6,7 +6,7 @@
   const L = window.DraftpadLogic;
   // Sample tokens carry a 24h volume only; the page reads the volume for the chosen window as `vol`.
   const SAMPLE = window.DraftpadSample.SAMPLE.map(t => Object.assign({ vol: t.vol24 }, t));
-  const { isNum, money, count, pct, ageLabel, esc, computeScore, evaluate, withinAge, isMint, splitFee, vampTerms, tooClose, WEIGHTS, BUYERS_FULL } = L;
+  const { isNum, money, count, pct, ageLabel, esc, computeScore, evaluate, withinAge, isMint, PRESETS, splitFee, vampTerms, tooClose, WEIGHTS, BUYERS_FULL } = L;
   const $ = id => document.getElementById(id);
 
   const REFRESH_MS = 5 * 60 * 1000;
@@ -232,7 +232,14 @@
   }
 
   /* ---------- Vamp offer ---------- */
-  function feeSplit() { return splitFee(+$('f-fee').value, +$('f-share').value); }
+  function presetId() {
+    const el = document.querySelector('#presets input:checked');
+    return el ? el.value : 'standard';
+  }
+  function feeSplit() {
+    const pr = PRESETS.find(x => x.id === presetId()) || PRESETS[1];
+    return Object.assign({ preset: pr.id }, splitFee(pr.total, pr.share));
+  }
 
   function vampPlan() {
     const f = feeSplit();
@@ -277,7 +284,7 @@
     $('sheet').hidden = true;
     renderVamp();
   });
-  ['f-fee', 'f-share', 'f-cap', 'f-bonus', 'f-claim'].forEach(id => $(id).addEventListener('input', () => renderVamp()));
+  ['f-cap', 'f-bonus', 'f-claim'].forEach(id => $(id).addEventListener('input', () => renderVamp()));
 
   function renderAll() {
     compute();
@@ -388,15 +395,18 @@
   });
 
   /* ---------- Launch form ---------- */
+  // Preset cards are built from the shared list so the page and the server cannot drift apart.
+  $('presets').insertAdjacentHTML('beforeend', PRESETS.map(pr =>
+    '<label class="preset"><input type="radio" name="preset" value="' + esc(pr.id) + '"' + (pr.id === 'standard' ? ' checked' : '') + '>' +
+    '<b>' + esc(pr.label) + ' · ' + pr.total.toFixed(2) + '% fee</b>' +
+    '<span>Creator keeps ' + pr.share + '%. ' + esc(pr.blurb) + '</span></label>').join(''));
+
   function feeLine() {
     const f = feeSplit();
-    $('o-fee').textContent = f.total.toFixed(2) + '%';
-    $('o-share').textContent = f.creatorSharePct + '%';
     $('fee-line').textContent = 'Each trade pays ' + f.total.toFixed(2) + '%: creator ' + f.creator.toFixed(2) + '%, platform ' +
       f.platform.toFixed(2) + '%. Early trades pay a higher fee that decays to this, as anti-sniper protection (prototype defaults).';
   }
-  $('f-fee').addEventListener('input', feeLine);
-  $('f-share').addEventListener('input', feeLine);
+  $('presets').addEventListener('change', () => { feeLine(); renderVamp(); });
   feeLine();
 
   function showErr(id, msg) {
@@ -445,7 +455,7 @@
       token: { name: name, ticker: '$' + sym.toUpperCase(), artwork: artFile.name },
       inspiredBy: { name: r.t.name, ticker: '$' + r.t.sym, listingCredit: (state.vamp ? 'Vamp offer for holders of ' : 'Inspired by ') + r.t.name + '. Not affiliated.' },
       pairsAgainst: $('f-quote').value,
-      fees: { totalPct: fee.total, creatorSharePct: fee.creatorSharePct, creatorPct: fee.creator, platformPct: fee.platform },
+      fees: { preset: fee.preset, totalPct: fee.total, creatorSharePct: fee.creatorSharePct, creatorPct: fee.creator, platformPct: fee.platform },
       walletCapFirst10Min: $('f-cap').value === '0' ? 'none' : $('f-cap').value + '% of supply',
       creatorAllocation: 'none, the creator buys on the curve like everyone else',
       status: 'staged in prototype, not deployed'

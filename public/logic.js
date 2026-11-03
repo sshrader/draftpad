@@ -124,6 +124,14 @@
     return { total, creatorSharePct: share, creator, platform: Math.round((total - creator) * 100) / 100 };
   }
 
+  // The fee presets creators choose from. Each needs one on-chain config, created once and reused,
+  // so the page offers these instead of free sliders. total = trading fee %, share = % the creator keeps.
+  const PRESETS = [
+    { id: 'low', label: 'Low fee', total: 0.5, share: 25, blurb: 'Cheapest to trade. Smaller payouts.' },
+    { id: 'standard', label: 'Standard', total: 1, share: 40, blurb: 'The default balance.' },
+    { id: 'creator', label: 'Creator-first', total: 2, share: 60, blurb: 'Higher fee, most goes to you.' }
+  ];
+
   const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
   // True for a well-formed Solana address (base58, 32 to 44 characters).
   const isMint = s => typeof s === 'string' && MINT_RE.test(s);
@@ -167,5 +175,5 @@
     return lev(a, b) <= tol;
   }
 
-  return { isNum, clamp, money, count, pct, ageLabel, esc, windowsFromSeries, momentum, momentumFast, WEIGHTS, BUYERS_FULL, computeScore, evaluate, withinAge, isMint, splitFee, vampTerms, tooClose };
+  return { isNum, clamp, money, count, pct, ageLabel, esc, windowsFromSeries, momentum, momentumFast, WEIGHTS, BUYERS_FULL, computeScore, evaluate, withinAge, isMint, PRESETS, splitFee, vampTerms, tooClose };
 });

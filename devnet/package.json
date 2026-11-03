@@ -10,7 +10,8 @@
     "pool": "node 02-create-pool.mjs",
     "buy": "node 03-buy.mjs",
     "migrate": "node 04-migrate.mjs",
-    "claim": "node 05-claim-fees.mjs"
+    "claim": "node 05-claim-fees.mjs",
+    "presets": "node 06-create-presets.mjs"
   },
   "engines": { "node": ">=20" },
   "dependencies": {

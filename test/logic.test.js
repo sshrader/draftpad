@@ -95,6 +95,17 @@ test('the trading fee splits between creator and platform by the creator share',
   assert.ok(Math.abs(f.creator + f.platform - f.total) < 1e-9);
 });
 
+test('fee presets are well formed and the standard one is the default split', () => {
+  assert.deepEqual(L.PRESETS.map(x => x.id), ['low', 'standard', 'creator']);
+  for (const pr of L.PRESETS) {
+    assert.ok(pr.total >= 0.25 && pr.total <= 2, pr.id);
+    assert.ok(pr.share >= 0 && pr.share <= 100, pr.id);
+    const f = L.splitFee(pr.total, pr.share);
+    assert.ok(Math.abs(f.creator + f.platform - f.total) < 1e-9, pr.id);
+  }
+  assert.deepEqual(L.splitFee(1, 40), { total: 1, creatorSharePct: 40, creator: 0.4, platform: 0.6 });
+});
+
 test('vamp terms set the original token beside the creator plan', () => {
   const t = { liq: 150000, top10: 22.5, mintRevoked: true, freezeRevoked: null, devPct: 3 };
   const plan = { platformFeePct: 0.5, creatorFeePct: 0.3, walletCapPct: 2, bonusPct: 5, claimDays: 14 };

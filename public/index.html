@@ -99,6 +99,16 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
 .castrip .muted { font: 400 11.5px/1.4 var(--font-mono); }
 @media (max-width: 760px) { .castrip { padding-left: calc(14px + 1.8rem + 12px); } }
 
+/* Fee presets */
+.presets { border: 0; padding: 0; margin: 0 0 12px; display: grid; gap: 8px; min-width: 0; }
+.presets legend { font: 500 12px/1.3 var(--font-body); color: var(--muted); padding: 0; margin-bottom: 6px; }
+.preset { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 10px; align-items: start; border: 1px solid var(--line-2); border-radius: 3px; padding: 10px 12px; background: var(--deck-2); cursor: pointer; }
+.preset:has(input:checked) { border-color: var(--xenon); background: #12202e; }
+.preset:has(input:focus-visible) { outline: 2px solid var(--xenon); outline-offset: 2px; }
+.preset input { grid-row: span 2; margin-top: 3px; accent-color: var(--xenon); }
+.preset b { font-weight: 600; }
+.preset span { font: 400 12px/1.4 var(--font-mono); color: var(--muted); overflow-wrap: anywhere; }
+
 /* Vamp offer */
 .modebar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
 .vbadge { font: 500 11px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--xenon); border: 1px solid var(--xenon); border-radius: 2px; padding: 5px 8px; overflow-wrap: anywhere; min-width: 0; }
@@ -330,10 +340,7 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
               <div class="field"><label for="f-cap">Wallet cap, first 10 min</label>
                 <select id="f-cap"><option value="1">1% of supply</option><option value="2" selected>2% of supply</option><option value="0">No cap</option></select></div>
             </div>
-            <div class="field"><label for="f-fee">Trading fee <output id="o-fee">1.00%</output></label>
-              <input id="f-fee" type="range" min="0.25" max="2" step="0.05" value="1"></div>
-            <div class="field"><label for="f-share">Creator keeps <output id="o-share">40%</output> of the fee</label>
-              <input id="f-share" type="range" min="0" max="100" step="5" value="40"></div>
+            <fieldset class="presets" id="presets"><legend>Fee preset</legend></fieldset>
             <p class="fees" id="fee-line"></p>
             <div class="vamp" id="vamp" hidden>
               <h4 class="vh">Holder offer</h4>

@@ -85,3 +85,65 @@ export function fromSheet(file) {
     ignored
   };
 }
+
+// Meteora renamed a few options between SDK versions. Try the names from the current docs first.
+const pick = (obj, ...names) => { for (const n of names) if (obj && obj[n] !== undefined) return obj[n]; return undefined; };
+
+// The curve every Draftpad launch uses. Only the fee settings and the migration size vary.
+//   steadyFeeBps     the trading fee once the anti-sniper decay has finished
+//   creatorSharePct  percent of the fee the creator keeps
+//   startFeeBps      the fee at launch, decaying down to the steady fee
+//   thresholdSol     SOL raised on the curve before it migrates
+//   supplyOnMigration  percent of supply sold on the curve before migration
+export function makeCurve(sdk, o) {
+  const authority = pick(sdk.TokenAuthorityOption, 'PartnerUpdateAuthority', 'Immutable');
+  const updateAuthority = pick(sdk.TokenUpdateAuthorityOption, 'PartnerUpdateAuthority', 'Immutable');
+  return sdk.buildCurve({
+    token: {
+      tokenType: pick(sdk.TokenType, 'SPLToken', 'SPL'),
+      tokenBaseDecimal: sdk.TokenDecimal.SIX,
+      tokenQuoteDecimal: sdk.TokenDecimal.NINE,
+      ...(authority !== undefined ? { tokenAuthorityOption: authority } : {}),
+      ...(updateAuthority !== undefined ? { tokenUpdateAuthority: updateAuthority } : {}),
+      totalTokenSupply: 1_000_000_000,
+      leftover: 1_000
+    },
+    fee: {
+      baseFeeParams: {
+        baseFeeMode: sdk.BaseFeeMode.FeeSchedulerExponential,
+        feeSchedulerParam: {
+          startingFeeBps: o.startFeeBps,
+          endingFeeBps: o.steadyFeeBps,
+          numberOfPeriod: 60,
+          totalDuration: 60
+        }
+      },
+      dynamicFeeEnabled: true,
+      collectFeeMode: sdk.CollectFeeMode.QuoteToken,
+      creatorTradingFeePercentage: o.creatorSharePct,
+      poolCreationFee: 0,
+      enableFirstSwapWithMinFee: false
+    },
+    migration: {
+      migrationOption: sdk.MigrationOption.MET_DAMM_V2,
+      migrationFeeOption: sdk.MigrationFeeOption.FixedBps25,
+      migrationFee: { feePercentage: 0, creatorFeePercentage: 0 }
+    },
+    liquidityDistribution: {
+      partnerLiquidityPercentage: 0,
+      partnerPermanentLockedLiquidityPercentage: 100,
+      creatorLiquidityPercentage: 0,
+      creatorPermanentLockedLiquidityPercentage: 0
+    },
+    lockedVesting: {
+      totalLockedVestingAmount: 0,
+      numberOfVestingPeriod: 0,
+      cliffUnlockAmount: 0,
+      totalVestingDuration: 0,
+      cliffDurationFromMigrationTime: 0
+    },
+    activationType: sdk.ActivationType.Timestamp,
+    percentageSupplyOnMigration: o.supplyOnMigration,
+    migrationQuoteThreshold: o.thresholdSol
+  });
+}

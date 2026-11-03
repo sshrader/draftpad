@@ -79,9 +79,10 @@ function createApp(opts) {
       return send(res, 400, 'Bad request', TEXT_TYPE);
     }
 
-    // The one POST route: asks the server to prepare an unsigned launch transaction.
-    if (req.method === 'POST' && (pathname === '/api/launch/prepare' || pathname === '/api/launch/buy')) {
-      const action = pathname === '/api/launch/buy' ? 'buy' : 'prepare';
+    // The POST routes: each asks the server to prepare an unsigned transaction for the wallet to sign.
+    const POSTS = { '/api/launch/prepare': 'prepare', '/api/launch/buy': 'buy', '/api/launch/claim': 'claim' };
+    if (req.method === 'POST' && Object.prototype.hasOwnProperty.call(POSTS, pathname)) {
+      const action = POSTS[pathname];
       const noStore = Object.assign({}, JSON_TYPE, { 'Cache-Control': 'no-store', Connection: 'close' });
       if (!launcher) return send(res, 503, JSON.stringify({ error: 'launch_unavailable' }), noStore);
       readJson(req, 4096).then(body => {
@@ -103,11 +104,13 @@ function createApp(opts) {
     }
 
     // Read-only chain lookups for the page: did a transaction land, and where does a curve stand.
-    if (pathname === '/api/launch/status' || pathname === '/api/launch/pool') {
+    if (pathname === '/api/launch/status' || pathname === '/api/launch/pool' || pathname === '/api/launch/fees') {
       const noStore = Object.assign({}, JSON_TYPE, { 'Cache-Control': 'no-store' });
       if (!launcher) return send(res, 503, JSON.stringify({ error: 'launch_unavailable' }), noStore);
       const ctx = { ip: clientIp(req) };
-      const run = pathname === '/api/launch/status' ? launcher.status(url.searchParams.get('sig'), ctx) : launcher.pool(url.searchParams.get('address'), ctx);
+      const run = pathname === '/api/launch/status' ? launcher.status(url.searchParams.get('sig'), ctx)
+        : pathname === '/api/launch/fees' ? launcher.fees(url.searchParams.get('address'), ctx)
+        : launcher.pool(url.searchParams.get('address'), ctx);
       run.then(r => send(res, r.status, req.method === 'HEAD' ? '' : JSON.stringify(r.body), noStore))
         .catch(() => send(res, 500, JSON.stringify({ error: 'server_error' }), noStore));
       return;

@@ -259,7 +259,66 @@ function createLauncher(opts) {
     }
   }
 
-  return { info, prepare, status, pool, buy };
+  // What the creator has earned on the curve and not yet claimed.
+  async function fees(address, ctx) {
+    if (!presets) return { status: 503, body: { error: 'launch_unavailable' } };
+    if (!allowRead((ctx && ctx.ip) || 'unknown')) return { status: 429, body: { error: 'rate_limited' } };
+    if (typeof address !== 'string' || !B58_RE.test(address)) return { status: 400, body: { error: 'bad_pool' } };
+    try {
+      const r = await readPool(address);
+      if (r.error) return { status: 404, body: { error: r.error } };
+      const b = await r.dbc.state.getPoolFeeBreakdown(r.poolPk);
+      const part = b && b.creator ? b.creator : {};
+      const lamports = x => (x && typeof x.toString === 'function' ? Number(x.toString()) : 0) || 0;
+      return {
+        status: 200,
+        body: {
+          address, creator: r.v.creator.toBase58(),
+          unclaimedSol: lamports(part.unclaimedQuoteFee) / 1e9,
+          claimedSol: lamports(part.claimedQuoteFee) / 1e9,
+          cluster: 'devnet'
+        }
+      };
+    } catch (err) {
+      logger.error('Launch fees read failed: ' + (err && err.stack ? err.stack : 'unknown error'));
+      return { status: 502, body: { error: 'fees_read_failed' } };
+    }
+  }
+
+  // Builds an unsigned claim of the creator's trading fees. Only the wallet that launched the pool can use it.
+  async function claim(input, ctx) {
+    if (!presets) return { status: 503, body: { error: 'launch_unavailable' } };
+    if (!allow((ctx && ctx.ip) || 'unknown')) return { status: 429, body: { error: 'rate_limited' } };
+    const b = input && typeof input === 'object' ? input : {};
+    if (typeof b.pool !== 'string' || !B58_RE.test(b.pool)) return { status: 400, body: { error: 'bad_pool' } };
+    if (typeof b.creator !== 'string' || !B58_RE.test(b.creator)) return { status: 400, body: { error: 'bad_creator' } };
+    try {
+      const r = await readPool(b.pool);
+      if (r.error) return { status: 404, body: { error: r.error } };
+      if (r.v.creator.toBase58() !== b.creator) return { status: 403, body: { error: 'not_creator' } };
+      const breakdown = await r.dbc.state.getPoolFeeBreakdown(r.poolPk);
+      const unclaimed = breakdown && breakdown.creator && breakdown.creator.unclaimedQuoteFee;
+      if (!unclaimed || Number(unclaimed.toString()) <= 0) return { status: 409, body: { error: 'nothing_to_claim' } };
+      const creatorPk = new r.web3.PublicKey(b.creator);
+      const MAX = new r.BN('18446744073709551615');
+      const tx = await r.dbc.creator.claimCreatorTradingFeeToReceiver({
+        creator: creatorPk, payer: creatorPk, pool: r.poolPk,
+        maxBaseAmount: MAX, maxQuoteAmount: MAX, receiver: creatorPk
+      });
+      const latest = await r.connection.getLatestBlockhash('confirmed');
+      tx.feePayer = creatorPk;
+      tx.recentBlockhash = latest.blockhash;
+      return {
+        status: 200,
+        body: { transaction: tx.serialize({ requireAllSignatures: false, verifySignatures: false }).toString('base64'), cluster: 'devnet' }
+      };
+    } catch (err) {
+      logger.error('Launch claim failed: ' + (err && err.stack ? err.stack : 'unknown error'));
+      return { status: 502, body: { error: 'prepare_failed' } };
+    }
+  }
+
+  return { info, prepare, status, pool, buy, fees, claim };
 }
 
 // Metadata for the token, built from the link itself so nothing needs storing. No image on devnet yet.

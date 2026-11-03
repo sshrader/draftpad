@@ -86,6 +86,8 @@ It switches on when `devnet/presets.json` exists (made by `npm run presets` in `
 
 After Phantom sends the launch, the page polls `GET /api/launch/status?sig=` until devnet confirms it (or it fails), then shows "Confirmed on devnet". A **Trade a devnet launch** card then opens with the new pool loaded. You can also paste any Draftpad pool address into it: `GET /api/launch/pool?address=` shows how full the curve is, and **Buy** (0.01 to 5 SOL) calls `POST /api/launch/buy`, which returns an unsigned swap for your wallet to sign. Pools from other projects are refused, as are buys on a full or migrated curve. A buy that would fill the curve is sent as a partial fill with no minimum output, which is a devnet-only workaround and must be removed before mainnet. Lookups are limited to 120 a minute and buys to 10 a minute per address.
 
+The trade card also shows the creator fees earned on the curve (`GET /api/launch/fees?address=`) and a **Claim creator fees** button. `POST /api/launch/claim` returns an unsigned claim only when the connected wallet is the one that launched the pool (403 `not_creator` otherwise), so the creator signs it in Phantom. Migrating a full curve is still the `devnet` script: `npm run migrate -- --pool <address>`.
+
 ## Next
 
 - Bundled-buy data from a second source, so the last signal can be scored.

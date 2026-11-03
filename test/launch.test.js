@@ -176,7 +176,7 @@ const SIG = '3uQi5xA7Dneip5qac73zDZV4CqysWxAmup8Moy4Rc8L5ro99LVcyeSvYB4GduFNYBJ8
 // A fake chain: one pool at a given fill level, plus a transaction status to report.
 function fakeChain(o) {
   const opt = Object.assign({ raised: 0, need: 1e9, migrated: 0, poolConfig: CONFIG, sigStatus: null }, o);
-  const seen = { swaps: [], quotes: [] };
+  const seen = { swaps: [], quotes: [], claims: [] };
   class PublicKey { constructor(v) { this.v = v; } toBase58() { return this.v; } }
   class BN { constructor(v) { this.v = v; } toString() { return String(this.v); } }
   const web3 = {
@@ -193,8 +193,12 @@ function fakeChain(o) {
     DynamicBondingCurveClient: class {
       constructor() {
         this.state = {
-          getPool: async () => (opt.noPool ? null : { config: new PublicKey(opt.poolConfig), quoteReserve: new BN(opt.raised), isMigrated: opt.migrated }),
+          getPool: async () => (opt.noPool ? null : { config: new PublicKey(opt.poolConfig), quoteReserve: new BN(opt.raised), isMigrated: opt.migrated, creator: new PublicKey(opt.poolCreator || CREATOR) }),
+          getPoolFeeBreakdown: async () => ({ creator: { unclaimedQuoteFee: new BN(opt.unclaimed === undefined ? 8502019 : opt.unclaimed), claimedQuoteFee: new BN(4) } }),
           getPoolConfig: async () => ({ migrationQuoteThreshold: new BN(opt.need), activationType: 'Timestamp' })
+        };
+        this.creator = {
+          claimCreatorTradingFeeToReceiver: async p => { seen.claims.push(p); return { serialize() { return Buffer.from('CLAIM-BYTES'); } }; }
         };
         this.pool = {
           swapQuote2: p => { if (opt.quoteThrows) throw new TypeError("Cannot read properties of undefined (reading 'quoteReserve')"); seen.quotes.push(p); return { minimumAmountOut: new BN(777) }; },
@@ -323,4 +327,57 @@ test('buy still goes out with no minimum when the SDK quote throws, and says so 
   assert.equal(ok.status, 200);
   assert.equal(chain.seen.swaps[0].minimumAmountOut.toString(), '0');
   assert.ok(logs.some(m => /quote failed/.test(m) && /quoteReserve/.test(m)));
+});
+
+test('fees shows what the creator has earned and who the creator is', async () => {
+  const l = createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({}).load, maxReadsPerMinute: 1000 });
+  const ok = await l.fees(POOL, ctx);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.creator, CREATOR);
+  assert.equal(ok.body.unclaimedSol, 0.008502019);
+  assert.equal(ok.body.claimedSol, 4e-9);
+  assert.equal((await l.fees('nope', ctx)).status, 400);
+  const other = createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({ poolConfig: 'So11111111111111111111111111111111111111112' }).load });
+  assert.equal((await other.fees(POOL, ctx)).body.error, 'not_a_draftpad_pool');
+});
+
+test('claim builds an unsigned transaction only for the pool creator and only when there is something to claim', async () => {
+  const chain = fakeChain({});
+  const l = createLauncher({ presets: PRESETS, logger: quiet, load: chain.load, maxPerMinute: 1000 });
+  const ok = await l.claim({ pool: POOL, creator: CREATOR }, ctx);
+  assert.equal(ok.status, 200);
+  assert.equal(ok.body.transaction, Buffer.from('CLAIM-BYTES').toString('base64'));
+  assert.equal(chain.seen.claims[0].creator.toBase58(), CREATOR);
+  assert.equal(chain.seen.claims[0].receiver.toBase58(), CREATOR);
+
+  const stranger = await l.claim({ pool: POOL, creator: 'So11111111111111111111111111111111111111112' }, ctx);
+  assert.equal(stranger.status, 403);
+  assert.equal(stranger.body.error, 'not_creator');
+  assert.equal(chain.seen.claims.length, 1);
+
+  const empty = createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({ unclaimed: 0 }).load, maxPerMinute: 1000 });
+  assert.equal((await empty.claim({ pool: POOL, creator: CREATOR }, ctx)).body.error, 'nothing_to_claim');
+  assert.equal((await l.claim({ pool: 'x', creator: CREATOR }, ctx)).status, 400);
+  assert.equal((await l.claim({ pool: POOL, creator: 5 }, ctx)).status, 400);
+});
+
+test('server: fees and claim routes', async () => {
+  const launcher = createLauncher({ presets: PRESETS, logger: quiet, load: fakeChain({}).load });
+  await withServer({ feed, launcher }, async base => {
+    const f = await fetch(base + '/api/launch/fees?address=' + POOL);
+    assert.equal(f.status, 200);
+    assert.equal(f.headers.get('cache-control'), 'no-store');
+    assert.equal((await f.json()).creator, CREATOR);
+    assert.equal((await fetch(base + '/api/launch/fees')).status, 400);
+    const c = await fetch(base + '/api/launch/claim', { method: 'POST', body: JSON.stringify({ pool: POOL, creator: CREATOR }) });
+    assert.equal(c.status, 200);
+    assert.match((await c.json()).transaction, /^[A-Za-z0-9+/=]+$/);
+    const bad = await fetch(base + '/api/launch/claim', { method: 'POST', body: JSON.stringify({ pool: POOL, creator: 'So11111111111111111111111111111111111111112' }) });
+    assert.equal(bad.status, 403);
+    assert.equal((await fetch(base + '/api/launch/claim')).status, 404);
+  });
+  await withServer({ feed }, async base => {
+    assert.equal((await fetch(base + '/api/launch/fees?address=' + POOL)).status, 503);
+    assert.equal((await fetch(base + '/api/launch/claim', { method: 'POST', body: '{}' })).status, 503);
+  });
 });

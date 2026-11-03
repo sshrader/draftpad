@@ -12,7 +12,9 @@ const creator = loadKey('partner');
 const { dbc } = await client();
 const baseMint = Keypair.generate();
 
-const tx = await dbc.pool.createPool({
+// Meteora's docs put createPool under client.creator; older builds used client.pool.
+const createPool = ((dbc.creator && dbc.creator.createPool) ? dbc.creator : dbc.pool).createPool.bind(dbc.creator && dbc.creator.createPool ? dbc.creator : dbc.pool);
+const tx = await createPool({
   baseMint: baseMint.publicKey,
   config: new PublicKey(state.config),
   name: arg('name', 'Draftpad Test'),

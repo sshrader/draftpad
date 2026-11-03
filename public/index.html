@@ -330,8 +330,10 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
               <div class="field"><label for="f-cap">Wallet cap, first 10 min</label>
                 <select id="f-cap"><option value="1">1% of supply</option><option value="2" selected>2% of supply</option><option value="0">No cap</option></select></div>
             </div>
-            <div class="field"><label for="f-fee">Creator fee <output id="o-fee">0.30%</output></label>
-              <input id="f-fee" type="range" min="0.1" max="1" step="0.05" value="0.3"></div>
+            <div class="field"><label for="f-fee">Trading fee <output id="o-fee">1.00%</output></label>
+              <input id="f-fee" type="range" min="0.25" max="2" step="0.05" value="1"></div>
+            <div class="field"><label for="f-share">Creator keeps <output id="o-share">40%</output> of the fee</label>
+              <input id="f-share" type="range" min="0" max="100" step="5" value="40"></div>
             <p class="fees" id="fee-line"></p>
             <div class="vamp" id="vamp" hidden>
               <h4 class="vh">Holder offer</h4>

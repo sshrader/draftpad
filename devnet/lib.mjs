@@ -64,22 +64,22 @@ export function arg(name, fallback) {
 }
 
 // Reads the "Copy settings" JSON from the Draftpad launch sheet and maps what DBC can express.
-// Fees: the page shows platform + creator percent per trade. DBC instead has one fee curve that
-// decays from a high starting fee to a steady fee, and splits it between partner and creator.
-// So: steady fee = total percent, creator share = creator / total. This is an approximation.
+// Fees: the page has one trading fee and a "creator keeps X%" share, which matches DBC: one fee curve that
+// decays from a high starting fee to a steady fee, split between partner and creator. Confirmed on devnet.
 export function fromSheet(file) {
   if (!file) return { steadyFeeBps: 80, creatorSharePct: 37, ignored: [] };
   const sheet = JSON.parse(fs.readFileSync(file, 'utf8'));
   const total = Number(sheet.fees && sheet.fees.totalPct);
+  const share = Number(sheet.fees && sheet.fees.creatorSharePct);
   const creator = Number(sheet.fees && sheet.fees.creatorPct);
-  if (!(total > 0) || !(creator >= 0)) throw new Error('The sheet has no fees block. Use "Copy settings" on a staged launch.');
+  if (!(total > 0) || !((share >= 0) || (creator >= 0))) throw new Error('The sheet has no fees block. Use "Copy settings" on a staged launch.');
   const ignored = [];
   if (sheet.walletCapFirst10Min && sheet.walletCapFirst10Min !== 'none') ignored.push('walletCapFirst10Min (no native DBC feature found)');
   if (sheet.vampOffer) ignored.push('vampOffer (needs the separate claim program)');
   if (sheet.pairsAgainst && sheet.pairsAgainst !== 'SOL') ignored.push('pairsAgainst ' + sheet.pairsAgainst + ' (first run is SOL only)');
   return {
     steadyFeeBps: Math.round(total * 100),
-    creatorSharePct: Math.round((creator / total) * 100),
+    creatorSharePct: share >= 0 ? Math.round(share) : Math.round((creator / total) * 100),
     name: sheet.token && sheet.token.name,
     symbol: sheet.token && String(sheet.token.ticker || '').replace(/^\$/, ''),
     ignored

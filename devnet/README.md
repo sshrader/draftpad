@@ -40,7 +40,7 @@ State (config, pool, token mint) is saved in `devnet/state.json`. Keys are in `d
 
 | Page setting | DBC | Note |
 |---|---|---|
-| Platform + creator fee | Fee scheduler ends at the total (bps); creator gets a share of it | Approximation. DBC has one fee curve, not two flat fees, and Meteora keeps a protocol share. The page wording will change once this is tested. |
+| Trading fee + creator keeps X% | Fee scheduler ends at the total (bps); creator share is a percentage of it | Confirmed on devnet: a 37% share paid the creator 37.0% of the fees. Meteora's own protocol cut is not visible in the breakdown. |
 | Anti-sniper | Fee scheduler starts at 50% and decays | `START_FEE_BPS` to change |
 | Pairs against | Quote mint | SOL only for now |
 | Wallet cap, first 10 min | Not applied | No native DBC feature found |

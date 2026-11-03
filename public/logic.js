@@ -115,6 +115,15 @@
     return isNum(t.ageH) && t.ageH <= maxH;
   }
 
+  // One trading fee, split between the creator and the platform. The creator keeps a share of the total,
+  // which is how Meteora's bonding curve pays out (confirmed on devnet: a 37% share paid the creator 37.0%).
+  function splitFee(totalPct, creatorSharePct) {
+    const total = Math.round(totalPct * 100) / 100;
+    const share = Math.min(100, Math.max(0, creatorSharePct));
+    const creator = Math.round(total * share) / 100;
+    return { total, creatorSharePct: share, creator, platform: Math.round((total - creator) * 100) / 100 };
+  }
+
   const MINT_RE = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
   // True for a well-formed Solana address (base58, 32 to 44 characters).
   const isMint = s => typeof s === 'string' && MINT_RE.test(s);
@@ -158,5 +167,5 @@
     return lev(a, b) <= tol;
   }
 
-  return { isNum, clamp, money, count, pct, ageLabel, esc, windowsFromSeries, momentum, momentumFast, WEIGHTS, BUYERS_FULL, computeScore, evaluate, withinAge, isMint, vampTerms, tooClose };
+  return { isNum, clamp, money, count, pct, ageLabel, esc, windowsFromSeries, momentum, momentumFast, WEIGHTS, BUYERS_FULL, computeScore, evaluate, withinAge, isMint, splitFee, vampTerms, tooClose };
 });

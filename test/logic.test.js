@@ -84,6 +84,17 @@ test('isMint accepts Solana addresses and rejects everything else', () => {
   assert.equal(SAMPLE.some(t => L.isMint(String(t.id))), false);
 });
 
+test('the trading fee splits between creator and platform by the creator share', () => {
+  assert.deepEqual(L.splitFee(1, 40), { total: 1, creatorSharePct: 40, creator: 0.4, platform: 0.6 });
+  assert.deepEqual(L.splitFee(0.8, 37), { total: 0.8, creatorSharePct: 37, creator: 0.3, platform: 0.5 });
+  assert.equal(L.splitFee(2, 0).creator, 0);
+  assert.equal(L.splitFee(2, 100).platform, 0);
+  assert.equal(L.splitFee(1, 250).creatorSharePct, 100);
+  assert.equal(L.splitFee(1, -5).creatorSharePct, 0);
+  const f = L.splitFee(1.35, 35);
+  assert.ok(Math.abs(f.creator + f.platform - f.total) < 1e-9);
+});
+
 test('vamp terms set the original token beside the creator plan', () => {
   const t = { liq: 150000, top10: 22.5, mintRevoked: true, freezeRevoked: null, devPct: 3 };
   const plan = { platformFeePct: 0.5, creatorFeePct: 0.3, walletCapPct: 2, bonusPct: 5, claimDays: 14 };

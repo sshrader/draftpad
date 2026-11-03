@@ -6,10 +6,9 @@
   const L = window.DraftpadLogic;
   // Sample tokens carry a 24h volume only; the page reads the volume for the chosen window as `vol`.
   const SAMPLE = window.DraftpadSample.SAMPLE.map(t => Object.assign({ vol: t.vol24 }, t));
-  const { isNum, money, count, pct, ageLabel, esc, computeScore, evaluate, withinAge, isMint, vampTerms, tooClose, WEIGHTS, BUYERS_FULL } = L;
+  const { isNum, money, count, pct, ageLabel, esc, computeScore, evaluate, withinAge, isMint, splitFee, vampTerms, tooClose, WEIGHTS, BUYERS_FULL } = L;
   const $ = id => document.getElementById(id);
 
-  const PLATFORM_FEE = 0.5;
   const REFRESH_MS = 5 * 60 * 1000;
   const WIN_LABEL = { '5m': '5 minutes', '1h': '1 hour', '6h': '6 hours', '24h': '24 hours' };
   // Jupiter's organic-buyer counts are small. These are the counts that earn full marks per window.
@@ -233,10 +232,12 @@
   }
 
   /* ---------- Vamp offer ---------- */
+  function feeSplit() { return splitFee(+$('f-fee').value, +$('f-share').value); }
+
   function vampPlan() {
-    const c = +$('f-fee').value;
+    const f = feeSplit();
     return {
-      platformFeePct: PLATFORM_FEE, creatorFeePct: c,
+      platformFeePct: f.platform, creatorFeePct: f.creator,
       walletCapPct: +$('f-cap').value,
       bonusPct: +$('f-bonus').value, claimDays: +$('f-claim').value
     };
@@ -276,7 +277,7 @@
     $('sheet').hidden = true;
     renderVamp();
   });
-  ['f-fee', 'f-cap', 'f-bonus', 'f-claim'].forEach(id => $(id).addEventListener('input', () => renderVamp()));
+  ['f-fee', 'f-share', 'f-cap', 'f-bonus', 'f-claim'].forEach(id => $(id).addEventListener('input', () => renderVamp()));
 
   function renderAll() {
     compute();
@@ -388,11 +389,14 @@
 
   /* ---------- Launch form ---------- */
   function feeLine() {
-    const c = +$('f-fee').value;
-    $('o-fee').textContent = c.toFixed(2) + '%';
-    $('fee-line').textContent = 'Platform ' + PLATFORM_FEE.toFixed(2) + '% + creator ' + c.toFixed(2) + '% = ' + (PLATFORM_FEE + c).toFixed(2) + '% per trade (prototype defaults)';
+    const f = feeSplit();
+    $('o-fee').textContent = f.total.toFixed(2) + '%';
+    $('o-share').textContent = f.creatorSharePct + '%';
+    $('fee-line').textContent = 'Each trade pays ' + f.total.toFixed(2) + '%: creator ' + f.creator.toFixed(2) + '%, platform ' +
+      f.platform.toFixed(2) + '%. Early trades pay a higher fee that decays to this, as anti-sniper protection (prototype defaults).';
   }
   $('f-fee').addEventListener('input', feeLine);
+  $('f-share').addEventListener('input', feeLine);
   feeLine();
 
   function showErr(id, msg) {
@@ -436,12 +440,12 @@
     if (!artFile) { showErr('e-art', 'Add your own artwork. The original token\'s art is not reused.'); ok = false; }
     if (!ok) return;
 
-    const c = +$('f-fee').value;
+    const fee = feeSplit();
     const cfg = {
       token: { name: name, ticker: '$' + sym.toUpperCase(), artwork: artFile.name },
       inspiredBy: { name: r.t.name, ticker: '$' + r.t.sym, listingCredit: (state.vamp ? 'Vamp offer for holders of ' : 'Inspired by ') + r.t.name + '. Not affiliated.' },
       pairsAgainst: $('f-quote').value,
-      fees: { platformPct: PLATFORM_FEE, creatorPct: +c.toFixed(2), totalPct: +(PLATFORM_FEE + c).toFixed(2) },
+      fees: { totalPct: fee.total, creatorSharePct: fee.creatorSharePct, creatorPct: fee.creator, platformPct: fee.platform },
       walletCapFirst10Min: $('f-cap').value === '0' ? 'none' : $('f-cap').value + '% of supply',
       creatorAllocation: 'none, the creator buys on the curve like everyone else',
       status: 'staged in prototype, not deployed'

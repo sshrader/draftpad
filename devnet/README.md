@@ -28,7 +28,7 @@ Fund both addresses at https://faucet.solana.com (pick devnet). The partner wall
 npm run config    # builds the curve and creates the config
 npm run pool      # launches a test token (--name, --symbol, --uri to change it)
 npm run buy       # buys 1 SOL at a time until the curve is full (--step, --max)
-DAMM_V2_CONFIG=<devnet address> npm run migrate
+npm run migrate
 ```
 
 Use a launch sheet from the page: stage a launch, press **Copy settings**, save it as `launch-sheet.json`, then run `npm run config -- --sheet ../launch-sheet.json`.

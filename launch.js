@@ -170,7 +170,9 @@ function createLauncher(opts) {
     const cfg = await dbc.state.getPoolConfig(v.config);
     const raised = Number(v.quoteReserve.toString());
     const need = Number(cfg.migrationQuoteThreshold.toString());
-    return { sdk, web3, spl, BN, connection, dbc, poolPk, v, cfg, presetId, raised, need };
+    // The SDK's quote reads virtualPool.poolState, so it needs the wrapper form of the pool account.
+    const quotePool = ps.poolState ? ps : { poolState: v };
+    return { sdk, web3, spl, BN, connection, dbc, poolPk, v, quotePool, cfg, presetId, raised, need };
   }
 
   async function pool(address, ctx) {
@@ -229,7 +231,7 @@ function createLauncher(opts) {
             ? new r.BN(await r.connection.getSlot())
             : new r.BN(Math.floor(Date.now() / 1000));
           const quote = r.dbc.pool.swapQuote2({
-            virtualPool: r.v, config: r.cfg, swapBaseForQuote: false, swapMode, amountIn, slippageBps: 300,
+            virtualPool: r.quotePool, config: r.cfg, swapBaseForQuote: false, swapMode, amountIn, slippageBps: 300,
             hasReferral: false, eligibleForFirstSwapWithMinFee: false, currentPoint
           });
           minimumAmountOut = quote.minimumAmountOut;

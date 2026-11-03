@@ -256,6 +256,7 @@ test('buy prepares an unsigned swap with a quoted minimum, and a partial fill wh
   assert.equal(chain.seen.swaps[0].swapMode, 'ExactIn');
   assert.equal(chain.seen.swaps[0].amountIn.toString(), '100000000');
   assert.equal(chain.seen.swaps[0].minimumAmountOut.toString(), '777');
+  assert.ok(chain.seen.quotes[0].virtualPool.poolState, 'quote gets the pool in wrapper form');
   assert.equal(chain.seen.swaps[0].owner.toBase58(), buyer);
   assert.equal(chain.seen.swaps[0].swapBaseForQuote, false);
 

@@ -1,15 +1,17 @@
 // Buys from the curve with the buyer wallet until it reaches the migration threshold.
-// Usage: node 03-buy.mjs [--step 1] [--max 20]   (step = SOL per buy, max = most buys)
+// Usage: node 03-buy.mjs [--step 1] [--max 20] [--pool <address>]   (step = SOL per buy, max = most buys)
+// --pool buys from any pool, for example one launched from the website. It defaults to the pool from step 2.
 import BN from 'bn.js';
 import { PublicKey } from '@solana/web3.js';
 import { client, connection, loadKey, send, readState, sol, arg } from './lib.mjs';
 
 const state = readState();
-if (!state.pool) { console.error('No pool yet. Run: npm run pool'); process.exit(1); }
+const poolAddress = arg('pool', state.pool);
+if (!poolAddress) { console.error('No pool yet. Run: npm run pool, or pass --pool <address>'); process.exit(1); }
 
 const buyer = loadKey('buyer');
 const { sdk, dbc } = await client();
-const pool = new PublicKey(state.pool);
+const pool = new PublicKey(poolAddress);
 const stepSol = Number(arg('step', 1));
 const maxBuys = Number(arg('max', 20));
 

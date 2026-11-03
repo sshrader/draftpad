@@ -1,0 +1,564 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Draftpad</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Big+Shoulders+Display:wght@600;800&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: range-control console. Safety filters run across the top, the ranked launch manifest sits left,
+   and a pad-prep panel for the selected token (telemetry, score, checks, launch form) sits right.
+   Palette: night-range ink, xenon floodlight accent, three status lights (go / hold / no-go).
+   Type: Big Shoulders Display for signage, Barlow for reading, IBM Plex Mono for data and labels. */
+:root {
+  color-scheme: dark;
+  --ink: #0a1119;
+  --deck: #101a26;
+  --deck-2: #16222f;
+  --line: #233245;
+  --line-2: #33475e;
+  --text: #e6eef6;
+  --muted: #8fa3b8;
+  --xenon: #86e3ff;
+  --xenon-dim: #1b4456;
+  --go: #4ade9a;
+  --hold: #f2c94c;
+  --nogo: #ff5d73;
+  --font-display: 'Big Shoulders Display', 'Arial Narrow', Impact, sans-serif;
+  --font-body: 'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+body {
+  background-color: var(--ink);
+  background-image: radial-gradient(70% 420px at 85% 0, rgba(134, 227, 255, 0.13), transparent 70%);
+  background-repeat: no-repeat;
+  color: var(--text);
+  font: 400 15px/1.5 var(--font-body);
+  padding-block: 20px 56px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1320px; margin: 0 auto; }
+h1, h2, h3, p, ul { margin: 0; padding: 0; }
+ul { list-style: none; }
+button, input, select { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--xenon); outline-offset: 2px; }
+
+.label { font: 500 11px/1.2 var(--font-mono); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.mono { font-family: var(--font-mono); }
+.muted { color: var(--muted); }
+
+/* Masthead */
+.mast { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 14px 32px; padding-bottom: 16px; }
+.mast h1 { font: 800 clamp(2.6rem, 8vw, 4.6rem)/0.88 var(--font-display); text-transform: uppercase; letter-spacing: 0.01em; }
+.mast h1 span { color: var(--xenon); }
+.mast .sub { margin-top: 10px; max-width: 46ch; color: var(--muted); text-wrap: balance; }
+.feed { display: flex; align-items: center; gap: 10px; font: 500 11px/1.3 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); border: 1px solid var(--line-2); padding: 8px 12px; border-radius: 3px; background: var(--deck); }
+.led { width: 8px; height: 8px; border-radius: 50%; background: var(--hold); flex: none; }
+@media (prefers-reduced-motion: no-preference) { .led { animation: pulse 2.4s ease-in-out infinite; } }
+@keyframes pulse { 50% { opacity: 0.35; } }
+.stripe { height: 6px; background: repeating-linear-gradient(-45deg, var(--xenon-dim) 0 10px, transparent 10px 20px); margin-bottom: 20px; }
+
+/* Range safety strip */
+.range { background: var(--deck); border: 1px solid var(--line); border-radius: 4px; padding: 16px; margin-bottom: 20px; }
+.range-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 14px 18px; margin-top: 12px; }
+.ctl { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.ctl > label, .ctl > .lbl { font: 500 12px/1.3 var(--font-body); color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.ctl output { font-family: var(--font-mono); color: var(--text); }
+select, input[type="text"] { width: 100%; background: var(--deck-2); border: 1px solid var(--line-2); border-radius: 3px; padding: 8px 10px; }
+input[type="range"] { width: 100%; accent-color: var(--xenon); }
+input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
+.check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
+.check input { accent-color: var(--xenon); width: 16px; height: 16px; }
+
+/* Board */
+.board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
+@media (min-width: 1000px) { .board { grid-template-columns: minmax(0, 1fr) 400px; } }
+.manifest-head { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 16px; margin-bottom: 10px; }
+.manifest-head h2, .pad h2 { font: 800 1.7rem/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; }
+.count { font: 400 12px/1.4 var(--font-mono); color: var(--muted); }
+
+.cols, .row {
+  display: grid;
+  grid-template-columns: 2.2rem 2.6rem minmax(0, 1.7fr) 4.6rem 4.6rem 4.2rem minmax(6.5rem, 1fr) 5rem;
+  align-items: center; gap: 12px;
+}
+.cols { padding: 0 14px 8px; font: 500 10.5px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); }
+.cols .r, .row .num { text-align: right; }
+.rows { display: flex; flex-direction: column; gap: 6px; }
+.row { width: 100%; text-align: left; background: var(--deck); border: 1px solid var(--line); border-radius: 4px; padding: 10px 14px; cursor: pointer; }
+.row:hover { border-color: var(--line-2); background: var(--deck-2); }
+.row[aria-pressed="true"] { border-color: var(--xenon); background: #12202e; box-shadow: 0 0 0 1px var(--xenon) inset; }
+.rank { font: 800 1.6rem/1 var(--font-display); color: var(--muted); }
+.row[aria-pressed="true"] .rank { color: var(--xenon); }
+.mark { width: 2.6rem; height: 2.6rem; border-radius: 3px; display: grid; place-items: center; font: 500 13px/1 var(--font-mono); }
+.who { min-width: 0; display: flex; flex-direction: column; }
+.who b { font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.who i { font: 400 12px/1.4 var(--font-mono); font-style: normal; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.stats { display: contents; }
+.num { font: 400 13px/1 var(--font-mono); font-variant-numeric: tabular-nums; }
+.num.up { color: var(--go); }
+.scorecell { display: flex; align-items: center; gap: 8px; }
+.scorecell em { font: 800 1.35rem/1 var(--font-display); font-style: normal; min-width: 1.7rem; font-variant-numeric: tabular-nums; }
+.bar { flex: 1; height: 6px; background: var(--line); border-radius: 1px; overflow: hidden; min-width: 30px; }
+.bar > span { display: block; height: 100%; background: var(--xenon); }
+.pill { display: inline-flex; justify-content: center; font: 500 11px/1 var(--font-mono); letter-spacing: 0.08em; padding: 5px 8px; border: 1px solid currentColor; border-radius: 2px; }
+.pill.pass { color: var(--go); } .pill.watch { color: var(--hold); } .pill.fail { color: var(--nogo); }
+
+@media (max-width: 760px) {
+  .cols { display: none; }
+  .row { grid-template-columns: 1.8rem 2.6rem minmax(0, 1fr) auto; grid-template-areas: "rank mark who pill" ". stats stats stats" ". score score score"; row-gap: 8px; }
+  .rank { grid-area: rank; } .mark { grid-area: mark; } .who { grid-area: who; } .pill { grid-area: pill; }
+  .stats { display: flex; flex-wrap: wrap; gap: 4px 16px; grid-area: stats; }
+  .scorecell { grid-area: score; }
+  .num { text-align: left; }
+  .num::before { content: attr(data-l) " "; color: var(--muted); font-size: 11px; }
+}
+
+.empty { padding: 28px 16px; border: 1px dashed var(--line-2); border-radius: 4px; color: var(--muted); text-align: center; }
+.held, .how { margin-top: 14px; border: 1px solid var(--line); border-radius: 4px; background: var(--deck); }
+.held summary, .how summary { cursor: pointer; padding: 11px 14px; font: 500 12px/1.3 var(--font-mono); letter-spacing: 0.06em; text-transform: uppercase; }
+.held ul { padding: 0 14px 12px; display: flex; flex-direction: column; gap: 10px; }
+.held li { display: flex; flex-wrap: wrap; gap: 2px 10px; font-size: 13px; }
+.held li b { font-weight: 600; }
+.held .why { color: var(--nogo); font: 400 12px/1.5 var(--font-mono); flex-basis: 100%; }
+.how div { padding: 0 14px 14px; color: var(--muted); font-size: 13px; display: flex; flex-direction: column; gap: 8px; max-width: 70ch; }
+.how code { font-family: var(--font-mono); color: var(--text); }
+
+/* Pad panel */
+.pad { background: var(--deck); border: 1px solid var(--line); border-radius: 4px; display: flex; flex-direction: column; min-width: 0; }
+@media (min-width: 1000px) { .pad { position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; } }
+.pad section, .pad .pad-head { padding: 16px; border-bottom: 1px solid var(--line); }
+.pad section:last-child { border-bottom: 0; }
+.padno { display: inline-block; font: 500 11px/1 var(--font-mono); letter-spacing: 0.14em; color: var(--ink); background: var(--xenon); padding: 4px 7px; border-radius: 2px; margin-bottom: 8px; }
+.pad-head p { font: 400 12px/1.5 var(--font-mono); color: var(--muted); margin-top: 6px; }
+.pad h3 { margin-bottom: 10px; display: flex; justify-content: space-between; align-items: baseline; }
+.pad h3 b { font: 800 1.5rem/1 var(--font-display); color: var(--xenon); letter-spacing: 0.02em; }
+.spark { display: block; width: 100%; height: 64px; }
+.spark rect { fill: var(--line-2); }
+.spark rect.hot { fill: var(--xenon); }
+.axis { display: flex; justify-content: space-between; font: 400 11px/1 var(--font-mono); color: var(--muted); margin-top: 6px; }
+.parts { display: flex; flex-direction: column; gap: 9px; }
+.part { display: grid; grid-template-columns: minmax(0, 1fr) 3.4rem; gap: 4px 10px; font-size: 13px; }
+.part .pts { font-family: var(--font-mono); text-align: right; font-variant-numeric: tabular-nums; }
+.part .bar { grid-column: 1 / -1; }
+.chk { display: grid; grid-template-columns: 3.4rem minmax(0, 1fr); gap: 2px 10px; padding: 7px 0; border-top: 1px solid var(--line); font-size: 13px; }
+.chk:first-child { border-top: 0; padding-top: 0; }
+.ck { font: 500 11px/1.6 var(--font-mono); letter-spacing: 0.06em; }
+.chk.pass .ck { color: var(--go); } .chk.watch .ck { color: var(--hold); } .chk.fail .ck { color: var(--nogo); }
+.cv { font-family: var(--font-mono); font-size: 12px; color: var(--muted); display: block; }
+
+/* Launch form */
+.hint { font-size: 13px; color: var(--muted); margin-bottom: 14px; max-width: 52ch; }
+.field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; min-width: 0; }
+.field > label { font: 500 12px/1.3 var(--font-body); color: var(--muted); display: flex; justify-content: space-between; gap: 8px; }
+.field output { font-family: var(--font-mono); color: var(--text); }
+.two { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+.err { color: var(--nogo); font-size: 12.5px; }
+.fees { font: 400 12px/1.5 var(--font-mono); color: var(--muted); margin: -6px 0 14px; }
+.vest { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 14px; }
+.vest select { width: auto; }
+.credit { font-size: 12.5px; color: var(--muted); border-left: 2px solid var(--xenon-dim); padding-left: 10px; margin-bottom: 14px; }
+#art-prev img { width: 64px; height: 64px; object-fit: cover; border-radius: 3px; border: 1px solid var(--line-2); margin-top: 4px; }
+.go-btn { background: var(--xenon); color: var(--ink); border: 0; border-radius: 3px; padding: 11px 16px; font: 500 12px/1 var(--font-mono); letter-spacing: 0.12em; text-transform: uppercase; cursor: pointer; }
+.go-btn:hover { background: #b0eeff; }
+.ghost-btn { background: transparent; color: var(--text); border: 1px solid var(--line-2); border-radius: 3px; padding: 8px 12px; font: 500 11px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; cursor: pointer; }
+.sheet { margin-top: 16px; border: 1px solid var(--xenon-dim); border-radius: 4px; padding: 14px; background: #0e1a26; }
+.sheet h4 { margin: 0 0 8px; font: 800 1.2rem/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; }
+.sheet p { font-size: 12.5px; color: var(--muted); margin-bottom: 10px; }
+.sheet pre { margin: 0 0 10px; font: 400 11.5px/1.5 var(--font-mono); white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text); }
+.foot { margin-top: 24px; font-size: 12.5px; color: var(--muted); max-width: 80ch; }
+</style>
+<style>:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}body{margin:0}[hidden]{display:none!important}</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="mast">
+    <div>
+      <h1>Draft<span>pad</span></h1>
+      <p class="sub">The ten Solana tokens moving fastest over the last 24 hours, screened for range safety before anyone builds on them.</p>
+    </div>
+    <div class="feed"><span class="led" aria-hidden="true"></span><span>Sample feed · 15 fictional tokens · 24h window</span></div>
+  </header>
+  <div class="stripe" aria-hidden="true"></div>
+
+  <section class="range" aria-labelledby="range-h">
+    <h2 class="label" id="range-h">Range safety · tokens that miss a limit are held back</h2>
+    <div class="range-grid">
+      <div class="ctl"><label for="c-liq">Minimum liquidity</label>
+        <select id="c-liq"><option value="10000">$10K</option><option value="25000" selected>$25K</option><option value="50000">$50K</option><option value="100000">$100K</option></select></div>
+      <div class="ctl"><label for="c-age">Minimum age</label>
+        <select id="c-age"><option value="1">1 hour</option><option value="6" selected>6 hours</option><option value="12">12 hours</option><option value="24">24 hours</option></select></div>
+      <div class="ctl"><label for="c-top">Top-10 holders, max <output id="o-top">45%</output></label>
+        <input id="c-top" type="range" min="20" max="80" step="1" value="45"></div>
+      <div class="ctl"><label for="c-bun">Bundled buys, max <output id="o-bun">20%</output></label>
+        <input id="c-bun" type="range" min="0" max="50" step="1" value="20"></div>
+      <div class="ctl"><span class="lbl">Authorities</span>
+        <label class="check" for="c-auth"><input id="c-auth" type="checkbox" checked> Mint and freeze revoked</label></div>
+      <div class="ctl"><label for="c-sort">Rank by</label>
+        <select id="c-sort"><option value="score" selected>Pad score</option><option value="vol">24h volume</option><option value="buyers">Unique buyers</option><option value="chg">24h change</option></select></div>
+    </div>
+  </section>
+
+  <div class="board">
+    <main>
+      <div class="manifest-head">
+        <h2>Launch manifest</h2>
+        <p class="count" id="count"></p>
+      </div>
+      <div class="cols" aria-hidden="true">
+        <span>#</span><span></span><span>Token</span><span class="r">24h</span><span class="r">Volume</span><span class="r">Buyers</span><span>Score</span><span>Status</span>
+      </div>
+      <div class="rows" id="rows"></div>
+      <details class="held" id="held"></details>
+      <details class="how">
+        <summary>How the pad score works</summary>
+        <div>
+          <p>Each token scores out of 100 from four signals. Raw volume is easy to fake with wash trading, so the weight sits on who is buying and how the volume is trending.</p>
+          <p><code>35</code> unique buyers in 24h (full marks at 5,000) · <code>30</code> volume momentum, the last 6 hours against the 18 before (full marks at 3x) · <code>20</code> holder spread, from the top-10 holders' share · <code>15</code> bundle cleanliness, from the share of bundled buys.</p>
+          <p>Range safety is separate from the score. A token that misses a limit is held back no matter how high it would score.</p>
+        </div>
+      </details>
+    </main>
+
+    <aside class="pad" id="pad" aria-label="Pad prep for the selected token">
+      <div id="pad-empty" class="empty" hidden>Nothing clears the current limits. Loosen a range-safety setting to bring tokens back.</div>
+      <div id="pad-body">
+        <div class="pad-head">
+          <span class="padno" id="p-no"></span>
+          <h2 id="p-name"></h2>
+          <p id="p-sub"></p>
+        </div>
+        <section>
+          <h3 class="label">Hourly volume, last 24h</h3>
+          <div id="p-spark"></div>
+          <div class="axis"><span>-24h</span><span>now</span></div>
+        </section>
+        <section>
+          <h3 class="label">Pad score <b id="p-total"></b></h3>
+          <div class="parts" id="p-parts"></div>
+        </section>
+        <section>
+          <h3 class="label">Range safety checks</h3>
+          <ul id="p-checks"></ul>
+        </section>
+        <section>
+          <form id="launch" novalidate>
+            <h3 class="label">Launch inspired by <span id="l-src"></span></h3>
+            <p class="hint">Pick your own name, ticker and artwork, then set your own fees and pairing. The original token's identity is not reused.</p>
+            <div class="field"><label for="f-name">Token name</label>
+              <input id="f-name" type="text" maxlength="32" autocomplete="off" placeholder="Salt Lantern">
+              <p class="err" id="e-name" hidden></p></div>
+            <div class="field"><label for="f-sym">Ticker</label>
+              <input id="f-sym" type="text" maxlength="8" autocomplete="off" placeholder="LNTRN">
+              <p class="err" id="e-sym" hidden></p></div>
+            <div class="field"><label for="f-art">Your artwork</label>
+              <input id="f-art" type="file" accept="image/*">
+              <div id="art-prev"></div>
+              <p class="err" id="e-art" hidden></p></div>
+            <div class="two">
+              <div class="field"><label for="f-quote">Pairs against</label>
+                <select id="f-quote"><option>SOL</option><option>USDC</option><option>JitoSOL</option></select></div>
+              <div class="field"><label for="f-cap">Wallet cap, first 10 min</label>
+                <select id="f-cap"><option value="1">1% of supply</option><option value="2" selected>2% of supply</option><option value="0">No cap</option></select></div>
+            </div>
+            <div class="field"><label for="f-fee">Creator fee <output id="o-fee">0.30%</output></label>
+              <input id="f-fee" type="range" min="0.1" max="1" step="0.05" value="0.3"></div>
+            <p class="fees" id="fee-line"></p>
+            <div class="vest">
+              <label class="check" for="f-vest"><input id="f-vest" type="checkbox" checked> Vest creator allocation</label>
+              <select id="f-vestd" aria-label="Vesting period"><option value="30">30 days</option><option value="60" selected>60 days</option><option value="90">90 days</option></select>
+            </div>
+            <p class="credit" id="credit"></p>
+            <button type="submit" class="go-btn">Stage launch</button>
+          </form>
+          <div class="sheet" id="sheet" hidden>
+            <h4>Launch sheet</h4>
+            <p>Staged in this prototype. Nothing was deployed and no transaction was made.</p>
+            <pre id="sheet-json"></pre>
+            <button type="button" class="ghost-btn" id="copy">Copy settings</button>
+            <span class="muted" id="copied" style="font-size:12px;margin-left:8px" hidden></span>
+          </div>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <p class="foot">All 15 tokens here are fictional sample data. A live version needs a server-side feed from a market-data API or your own indexer, because a published page like this cannot call those services directly.</p>
+</div>
+
+<script>
+// <logic>
+const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x));
+function money(n) {
+  if (n >= 1e6) return '$' + (n / 1e6).toFixed(n >= 1e7 ? 0 : 1).replace(/\.0$/, '') + 'M';
+  if (n >= 1e3) return '$' + (n / 1e3).toFixed(n >= 1e4 ? 0 : 1).replace(/\.0$/, '') + 'K';
+  return '$' + Math.round(n);
+}
+function count(n) { return n >= 1000 ? (n / 1000).toFixed(1).replace(/\.0$/, '') + 'K' : String(n); }
+function rng(seed) {
+  let a = seed >>> 0;
+  return function () {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function hourly(t) {
+  const r = rng(t.seed);
+  const w = [];
+  for (let h = 0; h < 24; h++) {
+    const x = h / 23;
+    let base = 1;
+    if (t.shape === 'surge') base = 0.35 + Math.pow(x, 2.4) * 3.2;
+    else if (t.shape === 'fade') base = 2.1 - 1.7 * x;
+    w.push(Math.max(0.05, base * (0.75 + r() * 0.5)));
+  }
+  const s = w.reduce((a, b) => a + b, 0);
+  return w.map(v => v / s * t.vol24);
+}
+function momentum(series) {
+  const avg = a => a.reduce((x, y) => x + y, 0) / a.length;
+  return avg(series.slice(18)) / avg(series.slice(0, 18));
+}
+const WEIGHTS = { buyers: 35, momentum: 30, spread: 20, clean: 15 };
+function computeScore(t, series) {
+  const ratio = momentum(series);
+  const parts = {
+    buyers: clamp(t.buyers / 5000) * WEIGHTS.buyers,
+    momentum: clamp((ratio - 0.5) / 2.5) * WEIGHTS.momentum,
+    spread: clamp((70 - t.top10) / 50) * WEIGHTS.spread,
+    clean: clamp(1 - t.bundled / 40) * WEIGHTS.clean
+  };
+  const total = Math.round(parts.buyers + parts.momentum + parts.spread + parts.clean);
+  return { parts, total, ratio };
+}
+function evaluate(t, f) {
+  const checks = [];
+  const add = (label, value, limit, status) => checks.push({ label, value, limit, status });
+  add('Liquidity', money(t.liq), 'min ' + money(f.minLiq), t.liq < f.minLiq ? 'fail' : (t.liq < f.minLiq * 2 ? 'watch' : 'pass'));
+  add('Age', t.ageH + 'h', 'min ' + f.minAge + 'h', t.ageH < f.minAge ? 'fail' : (t.ageH < f.minAge * 2 ? 'watch' : 'pass'));
+  add('Top-10 holders', t.top10 + '%', 'max ' + f.maxTop10 + '%', t.top10 > f.maxTop10 ? 'fail' : (t.top10 > f.maxTop10 - 8 ? 'watch' : 'pass'));
+  add('Bundled buys', t.bundled + '%', 'max ' + f.maxBundled + '%', t.bundled > f.maxBundled ? 'fail' : (t.bundled > f.maxBundled - 6 ? 'watch' : 'pass'));
+  add('Mint authority', t.mintRevoked ? 'Revoked' : 'Still active', f.needRevoked ? 'must be revoked' : '', t.mintRevoked ? 'pass' : (f.needRevoked ? 'fail' : 'watch'));
+  add('Freeze authority', t.freezeRevoked ? 'Revoked' : 'Still active', f.needRevoked ? 'must be revoked' : '', t.freezeRevoked ? 'pass' : (f.needRevoked ? 'fail' : 'watch'));
+  const status = checks.some(c => c.status === 'fail') ? 'fail' : (checks.some(c => c.status === 'watch') ? 'watch' : 'pass');
+  return { checks, status };
+}
+function norm(s) { return String(s).toLowerCase().replace(/[^a-z0-9]/g, ''); }
+function lev(a, b) {
+  const m = [];
+  for (let i = 0; i <= a.length; i++) { m[i] = [i]; }
+  for (let j = 0; j <= b.length; j++) { m[0][j] = j; }
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      m[i][j] = Math.min(m[i - 1][j] + 1, m[i][j - 1] + 1, m[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1));
+    }
+  }
+  return m[a.length][b.length];
+}
+function tooClose(input, original, isTicker) {
+  const a = norm(input), b = norm(original);
+  if (!a) return false;
+  if (a === b) return true;
+  if (!isTicker && a.length >= 4 && b.length >= 4 && (a.includes(b) || b.includes(a))) return true;
+  const tol = isTicker ? 1 : (Math.max(a.length, b.length) <= 5 ? 1 : 2);
+  return lev(a, b) <= tol;
+}
+// </logic>
+
+const TOKENS = [
+  { id: 1, name: 'Static Heron', sym: 'HERON', ageH: 31, liq: 184000, vol24: 2900000, chg: 212, buyers: 4210, holders: 6120, top10: 24, bundled: 6, mintRevoked: true, freezeRevoked: true, shape: 'surge', seed: 11 },
+  { id: 2, name: 'Tinfoil Moth', sym: 'MOTH', ageH: 52, liq: 142000, vol24: 1700000, chg: 96, buyers: 3380, holders: 5230, top10: 29, bundled: 9, mintRevoked: true, freezeRevoked: true, shape: 'steady', seed: 23 },
+  { id: 3, name: 'Dusk Walrus', sym: 'WLRS', ageH: 19, liq: 96000, vol24: 4400000, chg: 340, buyers: 5120, holders: 3890, top10: 41, bundled: 17, mintRevoked: true, freezeRevoked: true, shape: 'surge', seed: 37 },
+  { id: 4, name: 'Pocket Comet', sym: 'PCMT', ageH: 74, liq: 310000, vol24: 1200000, chg: 41, buyers: 2060, holders: 9810, top10: 18, bundled: 3, mintRevoked: true, freezeRevoked: true, shape: 'steady', seed: 41 },
+  { id: 5, name: 'Neon Pretzel', sym: 'PRTZL', ageH: 11, liq: 58000, vol24: 2100000, chg: 480, buyers: 3900, holders: 2700, top10: 36, bundled: 12, mintRevoked: true, freezeRevoked: false, shape: 'surge', seed: 53 },
+  { id: 6, name: 'Lunar Ferret', sym: 'FRRT', ageH: 27, liq: 71000, vol24: 1400000, chg: 128, buyers: 2480, holders: 3340, top10: 31, bundled: 8, mintRevoked: true, freezeRevoked: true, shape: 'surge', seed: 67 },
+  { id: 7, name: 'Brass Kite', sym: 'KITE', ageH: 40, liq: 52000, vol24: 880000, chg: 64, buyers: 1720, holders: 2900, top10: 27, bundled: 5, mintRevoked: true, freezeRevoked: true, shape: 'steady', seed: 71 },
+  { id: 8, name: 'Hollow Pigeon', sym: 'HPGN', ageH: 22, liq: 39000, vol24: 1100000, chg: 177, buyers: 2230, holders: 2150, top10: 38, bundled: 13, mintRevoked: true, freezeRevoked: true, shape: 'surge', seed: 83 },
+  { id: 9, name: 'Sunken Disco', sym: 'DSCO', ageH: 66, liq: 120000, vol24: 640000, chg: 33, buyers: 1380, holders: 4710, top10: 22, bundled: 4, mintRevoked: true, freezeRevoked: true, shape: 'fade', seed: 97 },
+  { id: 10, name: 'Quiet Otter', sym: 'OTTR', ageH: 15, liq: 28000, vol24: 540000, chg: 88, buyers: 1090, holders: 1320, top10: 33, bundled: 10, mintRevoked: true, freezeRevoked: true, shape: 'steady', seed: 101 },
+  { id: 11, name: 'Rusty Halo', sym: 'HALO', ageH: 20, liq: 66000, vol24: 2200000, chg: 221, buyers: 3010, holders: 2480, top10: 34, bundled: 38, mintRevoked: true, freezeRevoked: true, shape: 'surge', seed: 113 },
+  { id: 12, name: 'Mild Volcano', sym: 'MLDV', ageH: 3, liq: 47000, vol24: 910000, chg: 610, buyers: 1650, holders: 980, top10: 30, bundled: 7, mintRevoked: true, freezeRevoked: true, shape: 'surge', seed: 127 },
+  { id: 13, name: 'Paper Orca', sym: 'PORCA', ageH: 29, liq: 88000, vol24: 1900000, chg: 142, buyers: 2860, holders: 1900, top10: 63, bundled: 11, mintRevoked: true, freezeRevoked: true, shape: 'surge', seed: 131 },
+  { id: 14, name: 'Velvet Bolt', sym: 'VBLT', ageH: 58, liq: 77000, vol24: 730000, chg: 52, buyers: 1540, holders: 3620, top10: 25, bundled: 6, mintRevoked: true, freezeRevoked: true, shape: 'fade', seed: 149 },
+  { id: 15, name: 'Glass Badger', sym: 'GLSB', ageH: 36, liq: 44000, vol24: 690000, chg: 47, buyers: 1260, holders: 2410, top10: 28, bundled: 7, mintRevoked: true, freezeRevoked: true, shape: 'steady', seed: 157 }
+];
+TOKENS.forEach(t => { t.series = hourly(t); });
+
+const state = { f: { minLiq: 25000, minAge: 6, maxTop10: 45, maxBundled: 20, needRevoked: true }, sort: 'score', sel: null, rank: {} };
+const $ = id => document.getElementById(id);
+const PLATFORM_FEE = 0.5;
+let view = { top: [], passing: [], held: [] };
+
+function compute() {
+  const rows = TOKENS.map(t => ({ t, ev: evaluate(t, state.f), sc: computeScore(t, t.series) }));
+  const key = { score: r => r.sc.total, vol: r => r.t.vol24, buyers: r => r.t.buyers, chg: r => r.t.chg }[state.sort];
+  const passing = rows.filter(r => r.ev.status !== 'fail').sort((a, b) => key(b) - key(a) || b.t.vol24 - a.t.vol24);
+  const held = rows.filter(r => r.ev.status === 'fail');
+  view = { top: passing.slice(0, 10), passing, held };
+  if (!view.top.some(r => r.t.id === state.sel)) state.sel = view.top.length ? view.top[0].t.id : null;
+}
+function markStyle(sym) {
+  let h = 0;
+  for (const ch of sym) h = (h * 31 + ch.charCodeAt(0)) % 360;
+  return 'background:hsl(' + h + ' 38% 20%);color:hsl(' + h + ' 75% 78%);border:1px solid hsl(' + h + ' 35% 32%)';
+}
+const STATUS = { pass: ['pass', '● GO'], watch: ['watch', '▲ HOLD'], fail: ['fail', '✕ NO-GO'] };
+
+function renderBoard() {
+  const rows = $('rows');
+  if (!view.top.length) {
+    rows.innerHTML = '<div class="empty">No token clears these limits. Loosen a setting above.</div>';
+  } else {
+    rows.innerHTML = view.top.map((r, i) => {
+      const t = r.t, s = STATUS[r.ev.status];
+      return '<button type="button" class="row" data-id="' + t.id + '" aria-pressed="' + (t.id === state.sel) + '">' +
+        '<span class="rank">' + String(i + 1).padStart(2, '0') + '</span>' +
+        '<span class="mark" style="' + markStyle(t.sym) + '">' + t.sym.slice(0, 2) + '</span>' +
+        '<span class="who"><b>' + t.name + '</b><i>$' + t.sym + ' · ' + t.ageH + 'h old</i></span>' +
+        '<span class="stats">' +
+        '<span class="num up" data-l="24h">+' + t.chg + '%</span>' +
+        '<span class="num" data-l="Vol">' + money(t.vol24) + '</span>' +
+        '<span class="num" data-l="Buyers">' + count(t.buyers) + '</span></span>' +
+        '<span class="scorecell"><em>' + r.sc.total + '</em><span class="bar"><span style="width:' + r.sc.total + '%"></span></span></span>' +
+        '<span class="pill ' + s[0] + '">' + s[1] + '</span></button>';
+    }).join('');
+  }
+  $('count').textContent = 'Showing ' + view.top.length + ' of ' + view.passing.length + ' passing · ' + view.held.length + ' held back';
+  const held = $('held');
+  held.hidden = !view.held.length;
+  held.innerHTML = '<summary>Held back by range safety (' + view.held.length + ')</summary><ul>' +
+    view.held.map(r => '<li><b>' + r.t.name + '</b><span class="mono muted">$' + r.t.sym + '</span><span class="why">' +
+      r.ev.checks.filter(c => c.status === 'fail').map(c => c.label + ' ' + c.value + (c.limit ? ' (' + c.limit + ')' : '')).join(' · ') + '</span></li>').join('') + '</ul>';
+}
+
+function renderPad() {
+  const r = view.top.find(x => x.t.id === state.sel);
+  $('pad-empty').hidden = !!r;
+  $('pad-body').hidden = !r;
+  if (!r) return;
+  const t = r.t, pos = view.top.indexOf(r) + 1;
+  $('p-no').textContent = 'PAD ' + String(pos).padStart(2, '0');
+  $('p-name').textContent = t.name;
+  $('p-sub').textContent = '$' + t.sym + ' · ' + money(t.vol24) + ' volume · +' + t.chg + '% · ' + count(t.holders) + ' holders';
+  const max = Math.max.apply(null, t.series);
+  $('p-spark').innerHTML = '<svg class="spark" viewBox="0 0 240 64" preserveAspectRatio="none" role="img" aria-label="Hourly volume for the last 24 hours">' +
+    t.series.map((v, i) => { const h = Math.max(2, v / max * 62); return '<rect class="' + (i >= 18 ? 'hot' : '') + '" x="' + (i * 10) + '" y="' + (64 - h).toFixed(1) + '" width="8" height="' + h.toFixed(1) + '"/>'; }).join('') + '</svg>';
+  $('p-total').textContent = r.sc.total + ' / 100';
+  const labels = { buyers: 'Unique buyers (' + count(t.buyers) + ')', momentum: 'Volume momentum (' + r.sc.ratio.toFixed(1) + 'x)', spread: 'Holder spread (top 10 hold ' + t.top10 + '%)', clean: 'Bundle cleanliness (' + t.bundled + '% bundled)' };
+  $('p-parts').innerHTML = Object.keys(WEIGHTS).map(k => {
+    const p = r.sc.parts[k];
+    return '<div class="part"><span>' + labels[k] + '</span><span class="pts">' + p.toFixed(1) + '/' + WEIGHTS[k] + '</span><span class="bar"><span style="width:' + (p / WEIGHTS[k] * 100).toFixed(0) + '%"></span></span></div>';
+  }).join('');
+  $('p-checks').innerHTML = r.ev.checks.map(c => {
+    const s = { pass: 'PASS', watch: 'WATCH', fail: 'FAIL' }[c.status];
+    return '<li class="chk ' + c.status + '"><span class="ck">' + s + '</span><span>' + c.label + '<span class="cv">' + c.value + (c.limit ? ' · ' + c.limit : '') + '</span></span></li>';
+  }).join('');
+  $('l-src').textContent = t.name + ' ($' + t.sym + ')';
+  $('credit').textContent = 'Listing credit, always on: "Inspired by ' + t.name + ' ($' + t.sym + '). Not affiliated."';
+  $('sheet').hidden = true;
+  ['e-name', 'e-sym', 'e-art'].forEach(id => { $(id).hidden = true; });
+}
+
+function renderAll() { compute(); renderBoard(); renderPad(); }
+
+/* Filters */
+function readFilters() {
+  state.f.minLiq = +$('c-liq').value;
+  state.f.minAge = +$('c-age').value;
+  state.f.maxTop10 = +$('c-top').value;
+  state.f.maxBundled = +$('c-bun').value;
+  state.f.needRevoked = $('c-auth').checked;
+  state.sort = $('c-sort').value;
+  $('o-top').textContent = state.f.maxTop10 + '%';
+  $('o-bun').textContent = state.f.maxBundled + '%';
+  renderAll();
+}
+['c-liq', 'c-age', 'c-top', 'c-bun', 'c-auth', 'c-sort'].forEach(id => $(id).addEventListener('input', readFilters));
+
+$('rows').addEventListener('click', e => {
+  const b = e.target.closest('.row');
+  if (!b) return;
+  state.sel = +b.dataset.id;
+  renderBoard();
+  renderPad();
+  if (window.matchMedia('(max-width: 999px)').matches) {
+    const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    $('pad').scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+  }
+});
+
+/* Launch form */
+function feeLine() {
+  const c = +$('f-fee').value;
+  $('o-fee').textContent = c.toFixed(2) + '%';
+  $('fee-line').textContent = 'Platform ' + PLATFORM_FEE.toFixed(2) + '% + creator ' + c.toFixed(2) + '% = ' + (PLATFORM_FEE + c).toFixed(2) + '% per trade (prototype defaults)';
+}
+$('f-fee').addEventListener('input', feeLine);
+feeLine();
+$('f-vest').addEventListener('change', () => { $('f-vestd').disabled = !$('f-vest').checked; });
+
+let artFile = null;
+$('f-art').addEventListener('change', e => {
+  const f = e.target.files && e.target.files[0];
+  artFile = null;
+  $('art-prev').innerHTML = '';
+  $('e-art').hidden = true;
+  if (!f) return;
+  if (!f.type.startsWith('image/')) { showErr('e-art', 'Choose an image file.'); return; }
+  if (f.size > 2000000) { showErr('e-art', 'Use an image under 2 MB.'); return; }
+  artFile = f;
+  const rd = new FileReader();
+  rd.onload = () => { const im = document.createElement('img'); im.alt = 'Preview of your artwork'; im.src = rd.result; $('art-prev').appendChild(im); };
+  rd.readAsDataURL(f);
+});
+function showErr(id, msg) { const el = $(id); el.textContent = msg; el.hidden = false; }
+
+$('launch').addEventListener('submit', e => {
+  e.preventDefault();
+  const r = view.top.find(x => x.t.id === state.sel);
+  if (!r) return;
+  const name = $('f-name').value.trim(), sym = $('f-sym').value.trim().replace(/^\$/, '');
+  let ok = true;
+  ['e-name', 'e-sym', 'e-art'].forEach(id => { $(id).hidden = true; });
+  if (!name) { showErr('e-name', 'Enter a name for your token.'); ok = false; }
+  else if (tooClose(name, r.t.name, false)) { showErr('e-name', 'That reads too much like ' + r.t.name + '. Pick a name that stands on its own.'); ok = false; }
+  if (!sym) { showErr('e-sym', 'Enter a ticker.'); ok = false; }
+  else if (tooClose(sym, r.t.sym, true)) { showErr('e-sym', 'That ticker is too close to $' + r.t.sym + '. Pick a different one.'); ok = false; }
+  if (!artFile) { showErr('e-art', 'Add your own artwork. The original token\'s art is not reused.'); ok = false; }
+  if (!ok) return;
+  const c = +$('f-fee').value;
+  const cfg = {
+    token: { name: name, ticker: '$' + sym.toUpperCase(), artwork: artFile.name },
+    inspiredBy: { name: r.t.name, ticker: '$' + r.t.sym, listingCredit: 'Inspired by ' + r.t.name + '. Not affiliated.' },
+    pairsAgainst: $('f-quote').value,
+    fees: { platformPct: PLATFORM_FEE, creatorPct: +c.toFixed(2), totalPct: +(PLATFORM_FEE + c).toFixed(2) },
+    walletCapFirst10Min: $('f-cap').value === '0' ? 'none' : $('f-cap').value + '% of supply',
+    creatorVesting: $('f-vest').checked ? $('f-vestd').value + ' days' : 'none',
+    status: 'staged in prototype, not deployed'
+  };
+  $('sheet-json').textContent = JSON.stringify(cfg, null, 2);
+  $('copied').hidden = true;
+  $('sheet').hidden = false;
+  $('sheet').scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
+});
+
+$('copy').addEventListener('click', () => {
+  const pre = $('sheet-json'), note = $('copied');
+  const done = msg => { note.textContent = msg; note.hidden = false; };
+  const select = () => { const rg = document.createRange(); rg.selectNodeContents(pre); const sel = window.getSelection(); sel.removeAllRanges(); sel.addRange(rg); done('Press copy on your keyboard to finish.'); };
+  try {
+    navigator.clipboard.writeText(pre.textContent).then(() => done('Copied.'), select);
+  } catch (err) { select(); }
+});
+
+renderAll();
+</script>
+</body>
+</html>

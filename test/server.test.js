@@ -17,8 +17,8 @@ async function withServer(feed, fn) {
 
 const fakeFeed = {
   configured: true,
-  async get(category) {
-    return { status: 200, body: { source: 'test', category, tokens: [] } };
+  async get(window) {
+    return { status: 200, body: { source: 'test', window, tokens: [] } };
   }
 };
 
@@ -33,20 +33,21 @@ test('healthz reports whether the live feed is configured', async () => {
   });
 });
 
-test('/api/trending passes the category through and sets cache headers', async () => {
+test('/api/trending passes the window through and sets cache headers', async () => {
   await withServer(fakeFeed, async base => {
-    const res = await fetch(base + '/api/trending?category=toptraded');
+    const res = await fetch(base + '/api/trending?window=1h');
     assert.equal(res.status, 200);
-    assert.equal((await res.json()).category, 'toptraded');
+    assert.equal((await res.json()).window, '1h');
     assert.equal(res.headers.get('cache-control'), 'public, max-age=30');
     const def = await (await fetch(base + '/api/trending')).json();
-    assert.equal(def.category, 'toptrending');
+    assert.equal(def.window, '24h');
   });
 });
 
-test('/api/trending rejects unknown categories and does not cache errors', async () => {
+test('/api/trending rejects unknown windows and does not cache errors', async () => {
   await withServer(fakeFeed, async base => {
-    assert.equal((await fetch(base + '/api/trending?category=../../etc')).status, 400);
+    assert.equal((await fetch(base + '/api/trending?window=../../etc')).status, 400);
+    assert.equal((await fetch(base + '/api/trending?window=7d')).status, 400);
   });
   const failing = { configured: true, get: async () => ({ status: 503, body: { error: 'feed_unavailable' } }) };
   await withServer(failing, async base => {

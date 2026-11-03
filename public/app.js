@@ -4,32 +4,43 @@
   'use strict';
 
   const L = window.DraftpadLogic;
-  const SAMPLE = window.DraftpadSample.SAMPLE;
-  const { isNum, money, count, pct, ageLabel, esc, computeScore, evaluate, tooClose, WEIGHTS } = L;
+  // Sample tokens carry a 24h volume only; the page reads the volume for the chosen window as `vol`.
+  const SAMPLE = window.DraftpadSample.SAMPLE.map(t => Object.assign({ vol: t.vol24 }, t));
+  const { isNum, money, count, pct, ageLabel, esc, computeScore, evaluate, withinAge, tooClose, WEIGHTS, BUYERS_FULL } = L;
   const $ = id => document.getElementById(id);
 
   const PLATFORM_FEE = 0.5;
   const REFRESH_MS = 5 * 60 * 1000;
+  const WIN_LABEL = { '1h': '1 hour', '6h': '6 hours', '24h': '24 hours' };
+  // Jupiter's organic-buyer counts are small. These are the counts that earn full marks per window.
+  const LIVE_BUYERS_FULL = { '1h': 60, '6h': 200, '24h': 500 };
   const STATUS = { pass: ['pass', '● GO'], watch: ['watch', '▲ HOLD'], fail: ['fail', '✕ NO-GO'] };
   const CHECK_TAG = { pass: 'PASS', watch: 'WATCH', fail: 'FAIL', na: 'N/A' };
 
-  const state = { f: { minLiq: 25000, minAge: 6, maxTop10: 45, maxBundled: 20, needRevoked: true }, sort: 'score', sel: null };
+  const state = { f: { minLiq: 25000, minAge: 6, maxTop10: 45, maxBundled: 20, needRevoked: true }, maxAge: 168, win: '24h', sort: 'score', sel: null };
   let TOKENS = SAMPLE;
   let mode = 'sample';
-  let view = { top: [], passing: [], held: [] };
+  let view = { top: [], passing: [], held: [], tooOld: 0 };
+  let loadSeq = 0;
 
   /* ---------- Data ---------- */
+  // Which window the numbers describe: sample data is always 24h.
+  function activeWin() { return mode === 'live' ? state.win : '24h'; }
+  function buyersFull() { return mode === 'live' ? LIVE_BUYERS_FULL[state.win] : BUYERS_FULL; }
+
   function compute() {
-    const rows = TOKENS.map(t => ({ t, ev: evaluate(t, state.f), sc: computeScore(t) }));
+    const inScope = TOKENS.filter(t => withinAge(t, state.maxAge));
+    const sc = { buyersFull: buyersFull() };
+    const rows = inScope.map(t => ({ t, ev: evaluate(t, state.f), sc: computeScore(t, sc) }));
     const key = {
       score: r => r.sc.total,
-      vol: r => r.t.vol24,
+      vol: r => r.t.vol,
       buyers: r => (isNum(r.t.buyers) ? r.t.buyers : -1),
       chg: r => (isNum(r.t.chg) ? r.t.chg : -Infinity)
     }[state.sort];
-    const passing = rows.filter(r => r.ev.status !== 'fail').sort((a, b) => key(b) - key(a) || b.t.vol24 - a.t.vol24);
+    const passing = rows.filter(r => r.ev.status !== 'fail').sort((a, b) => key(b) - key(a) || b.t.vol - a.t.vol);
     const held = rows.filter(r => r.ev.status === 'fail');
-    view = { top: passing.slice(0, 10), passing, held };
+    view = { top: passing.slice(0, 10), passing, held, tooOld: TOKENS.length - inScope.length };
     if (!view.top.some(r => r.t.id === state.sel)) state.sel = view.top.length ? view.top[0].t.id : null;
   }
 
@@ -58,20 +69,46 @@
           '<span class="mark" style="' + markStyle(t.sym) + '">' + esc(initials) + '</span>' +
           '<span class="who"><b>' + esc(t.name) + '</b><i>$' + esc(t.sym) + ' · ' + ageLabel(t.ageH) + ' old</i></span>' +
           '<span class="stats">' +
-          '<span class="num' + cls + '" data-l="24h">' + changeText(t.chg) + '</span>' +
-          '<span class="num" data-l="Vol">' + money(t.vol24) + '</span>' +
+          '<span class="num' + cls + '" data-l="' + activeWin() + '">' + changeText(t.chg) + '</span>' +
+          '<span class="num" data-l="Vol">' + money(t.vol) + '</span>' +
           '<span class="num" data-l="Buyers">' + (isNum(t.buyers) ? count(t.buyers) : '–') + '</span></span>' +
           '<span class="scorecell"><em>' + r.sc.total + '</em><span class="bar"><span style="width:' + r.sc.total + '%"></span></span></span>' +
           '<span class="pill ' + s[0] + '">' + s[1] + '</span></button>';
       }).join('');
     }
-    $('count').textContent = 'Showing ' + view.top.length + ' of ' + view.passing.length + ' passing · ' + view.held.length + ' held back';
+    $('count').textContent = 'Showing ' + view.top.length + ' of ' + view.passing.length + ' passing · ' + view.held.length + ' held back' +
+      (view.tooOld ? ' · ' + view.tooOld + ' older than ' + maxAgeText() + ' hidden' : '');
+    renderWinUi();
     const held = $('held');
     held.hidden = !view.held.length;
     held.innerHTML = '<summary>Held back by range safety (' + view.held.length + ')</summary><ul>' +
       view.held.map(r => '<li><b>' + esc(r.t.name) + '</b><span class="mono muted">$' + esc(r.t.sym) + '</span><span class="why">' +
         esc(r.ev.checks.filter(c => c.status === 'fail').map(c => c.label + ' ' + c.value + (c.limit ? ' (' + c.limit + ')' : '')).join(' · ')) +
         '</span></li>').join('') + '</ul>';
+  }
+
+  function maxAgeText() {
+    return state.maxAge % 24 === 0 ? state.maxAge / 24 + 'd' : state.maxAge + 'h';
+  }
+
+  // Window toggle, column heading, headline and sort labels follow the chosen window.
+  function renderWinUi() {
+    const w = activeWin();
+    const liveMode = mode === 'live';
+    Array.from(document.querySelectorAll('#win button')).forEach(b => {
+      b.setAttribute('aria-pressed', String(b.dataset.win === w));
+      b.disabled = !liveMode;
+    });
+    $('win-note').textContent = liveMode ? '' : 'Sample data is 24h only';
+    $('col-chg').textContent = w;
+    $('win-text').textContent = 'last ' + WIN_LABEL[w];
+    const opts = $('c-sort').options;
+    for (const o of opts) {
+      if (o.value === 'vol') o.textContent = w + ' volume';
+      if (o.value === 'chg') o.textContent = w + ' change';
+      if (o.value === 'buyers') o.textContent = 'Unique buyers';
+    }
+    $('how-buyers').textContent = count(buyersFull());
   }
 
   /* ---------- Pad panel ---------- */
@@ -128,13 +165,13 @@
 
     $('p-no').textContent = 'PAD ' + String(pos).padStart(2, '0');
     $('p-name').textContent = t.name;
-    $('p-sub').textContent = '$' + t.sym + ' · ' + money(t.vol24) + ' volume · ' + changeText(t.chg) + ' · ' +
+    $('p-sub').textContent = '$' + t.sym + ' · ' + money(t.vol) + ' ' + activeWin() + ' volume · ' + changeText(t.chg) + ' · ' +
       (isNum(t.holders) ? count(t.holders) + ' holders' : 'holders n/a');
     renderSpark(t);
 
     $('p-total').textContent = r.sc.total + ' / 100';
     const labels = {
-      buyers: 'Unique buyers (' + (isNum(t.buyers) ? count(t.buyers) : 'no data') + ')',
+      buyers: 'Unique buyers, ' + activeWin() + ' (' + (isNum(t.buyers) ? count(t.buyers) : 'no data') + ')',
       momentum: 'Volume momentum (' + (r.sc.ratio === null ? 'no data' : r.sc.ratio.toFixed(1) + 'x') + ')',
       spread: 'Holder spread (top holders own ' + (isNum(t.top10) ? pct(t.top10) : 'no data') + ')',
       clean: 'Bundle cleanliness (' + (isNum(t.bundled) ? pct(t.bundled) + ' bundled' : 'no data') + ')'
@@ -172,12 +209,13 @@
     state.f.maxTop10 = +$('c-top').value;
     state.f.maxBundled = +$('c-bun').value;
     state.f.needRevoked = $('c-auth').checked;
+    state.maxAge = +$('c-maxage').value;
     state.sort = $('c-sort').value;
     $('o-top').textContent = state.f.maxTop10 + '%';
     $('o-bun').textContent = state.f.maxBundled + '%';
     renderAll();
   }
-  ['c-liq', 'c-age', 'c-top', 'c-bun', 'c-auth', 'c-sort'].forEach(id => $(id).addEventListener('input', readFilters));
+  ['c-liq', 'c-age', 'c-maxage', 'c-top', 'c-bun', 'c-auth', 'c-sort'].forEach(id => $(id).addEventListener('input', readFilters));
 
   $('rows').addEventListener('click', e => {
     const b = e.target.closest('.row');
@@ -198,6 +236,7 @@
   }
 
   const LIVE_NOTE = 'Live data comes from Jupiter\'s token API through this site\'s server and refreshes every few minutes. ' +
+    'Each list merges the trending, most-traded and newest tokens, so fresh launches are not buried under older names. ' +
     'Bundled-buy share is not in that feed, so it shows as no data and is left out of the score. ' +
     'Token names and symbols come from the market and can be misleading, so treat each one as untrusted.';
 
@@ -208,9 +247,9 @@
     return 'These 15 tokens are fictional sample data. ' + reason;
   }
 
-  async function loadLive() {
+  async function loadLive(win) {
     try {
-      const res = await fetch('/api/trending', { headers: { Accept: 'application/json' } });
+      const res = await fetch('/api/trending?window=' + encodeURIComponent(win), { headers: { Accept: 'application/json' } });
       const body = await res.json().catch(() => null);
       if (!res.ok || !body || !Array.isArray(body.tokens) || !body.tokens.length) {
         return { ok: false, why: body && body.error ? body.error : 'http_' + res.status };
@@ -240,6 +279,23 @@
     renderBoard();
     renderPad(prevMode === mode && prevSel === state.sel);
   }
+
+  // Fetch the chosen window. Only the newest request may change the page, so a slow
+  // answer for a window the person already left cannot overwrite the current one.
+  function refresh() {
+    const seq = ++loadSeq;
+    const win = state.win;
+    return loadLive(win).then(r => { if (seq === loadSeq) applyFeed(r); });
+  }
+
+  $('win').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (!b || b.disabled || b.dataset.win === state.win) return;
+    state.win = b.dataset.win;
+    setFeedUi('Loading ' + state.win + ' window…', false);
+    renderWinUi();
+    refresh();
+  });
 
   /* ---------- Launch form ---------- */
   function feeLine() {
@@ -329,6 +385,6 @@
   setFeedUi('Loading live feed…', false);
   $('foot').textContent = '';
   renderAll();
-  loadLive().then(applyFeed);
-  setInterval(() => { loadLive().then(applyFeed); }, REFRESH_MS);
+  refresh();
+  setInterval(refresh, REFRESH_MS);
 })();

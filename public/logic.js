@@ -49,10 +49,13 @@
   const WEIGHTS = { buyers: 35, momentum: 30, spread: 20, clean: 15 };
 
   // Signals with no data are left out and the total is scaled over the weight that remains.
-  function computeScore(t) {
+  // opts.buyersFull is the buyer count that earns full marks. It differs by data source and window.
+  const BUYERS_FULL = 5000;
+  function computeScore(t, opts) {
+    const full = opts && isNum(opts.buyersFull) && opts.buyersFull > 0 ? opts.buyersFull : BUYERS_FULL;
     const ratio = momentum(t.win);
     const parts = {
-      buyers: isNum(t.buyers) ? clamp(t.buyers / 5000) * WEIGHTS.buyers : null,
+      buyers: isNum(t.buyers) ? clamp(t.buyers / full) * WEIGHTS.buyers : null,
       momentum: ratio === null ? null : clamp((ratio - 0.5) / 2.5) * WEIGHTS.momentum,
       spread: isNum(t.top10) ? clamp((70 - t.top10) / 50) * WEIGHTS.spread : null,
       clean: isNum(t.bundled) ? clamp(1 - t.bundled / 40) * WEIGHTS.clean : null
@@ -98,6 +101,12 @@
     return { checks, status };
   }
 
+  // True when the token is no older than maxH hours. maxH of 0 means any age. Unknown age is out of scope when a limit is set.
+  function withinAge(t, maxH) {
+    if (!maxH) return true;
+    return isNum(t.ageH) && t.ageH <= maxH;
+  }
+
   function norm(s) { return String(s).toLowerCase().replace(/[^a-z0-9]/g, ''); }
   function lev(a, b) {
     const m = [];
@@ -121,5 +130,5 @@
     return lev(a, b) <= tol;
   }
 
-  return { isNum, clamp, money, count, pct, ageLabel, esc, windowsFromSeries, momentum, WEIGHTS, computeScore, evaluate, tooClose };
+  return { isNum, clamp, money, count, pct, ageLabel, esc, windowsFromSeries, momentum, WEIGHTS, BUYERS_FULL, computeScore, evaluate, withinAge, tooClose };
 });

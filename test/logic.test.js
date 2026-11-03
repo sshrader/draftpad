@@ -47,6 +47,23 @@ test('missing signals are left out and the total is scaled over the rest', () =>
   assert.equal(empty.coverage, 0);
 });
 
+test('the buyer count that earns full marks can be rescaled', () => {
+  const t = { buyers: 250, top10: null, bundled: null, win: null };
+  assert.equal(L.computeScore(t).total, 5);
+  assert.equal(L.computeScore(t, { buyersFull: 500 }).total, 50);
+  assert.equal(L.computeScore(t, { buyersFull: 100 }).total, 100);
+  assert.equal(L.computeScore(t, { buyersFull: 0 }).total, 5);
+  assert.equal(L.BUYERS_FULL, 5000);
+});
+
+test('max age keeps young tokens, treats 0 as any age, and drops unknown ages when a limit is set', () => {
+  assert.equal(L.withinAge({ ageH: 100 }, 168), true);
+  assert.equal(L.withinAge({ ageH: 169 }, 168), false);
+  assert.equal(L.withinAge({ ageH: 99999 }, 0), true);
+  assert.equal(L.withinAge({ ageH: null }, 168), false);
+  assert.equal(L.withinAge({ ageH: null }, 0), true);
+});
+
 test('unknown authorities fail when revoked is required and only warn otherwise', () => {
   const base = { liq: 100000, ageH: 48, top10: 20, bundled: 5, mintRevoked: null, freezeRevoked: true };
   assert.equal(L.evaluate(base, FILTERS).status, 'fail');

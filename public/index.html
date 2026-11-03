@@ -73,6 +73,17 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
 .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--text); }
 .check input { accent-color: var(--xenon); width: 16px; height: 16px; }
 
+/* Window toggle */
+.win-wrap { display: flex; align-items: center; gap: 10px; }
+.win-wrap .hint { margin: 0; font-size: 12px; }
+.seg { display: inline-flex; border: 1px solid var(--line-2); border-radius: 3px; overflow: hidden; background: var(--deck); }
+.seg button { font: 500 12px/1 var(--font-mono); letter-spacing: 0.08em; padding: 8px 12px; min-width: 44px; background: transparent; color: var(--muted); border: 0; border-right: 1px solid var(--line-2); cursor: pointer; }
+.seg button:last-child { border-right: 0; }
+.seg button:hover:not(:disabled) { background: var(--deck-2); color: var(--text); }
+.seg button[aria-pressed="true"] { background: var(--xenon); color: var(--ink); }
+.seg button:disabled { cursor: default; opacity: 0.6; }
+.seg button:focus-visible { outline: 2px solid var(--xenon); outline-offset: -2px; }
+
 /* Board */
 .board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
 @media (min-width: 1000px) { .board { grid-template-columns: minmax(0, 1fr) 400px; } }
@@ -184,7 +195,7 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
   <header class="mast">
     <div>
       <h1>Draft<span>pad</span></h1>
-      <p class="sub">The ten Solana tokens moving fastest over the last 24 hours, screened for range safety before anyone builds on them.</p>
+      <p class="sub">The ten Solana tokens moving fastest over the <span id="win-text">last 24 hours</span>, screened for range safety before anyone builds on them.</p>
     </div>
     <div class="feed" role="status"><span class="led" id="feed-led" aria-hidden="true"></span><span id="feed-text">Loading live feed…</span></div>
   </header>
@@ -197,6 +208,8 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
         <select id="c-liq"><option value="10000">$10K</option><option value="25000" selected>$25K</option><option value="50000">$50K</option><option value="100000">$100K</option></select></div>
       <div class="ctl"><label for="c-age">Minimum age</label>
         <select id="c-age"><option value="1">1 hour</option><option value="6" selected>6 hours</option><option value="12">12 hours</option><option value="24">24 hours</option></select></div>
+      <div class="ctl"><label for="c-maxage">Maximum age</label>
+        <select id="c-maxage"><option value="24">1 day</option><option value="168" selected>7 days</option><option value="720">30 days</option><option value="0">Any age</option></select></div>
       <div class="ctl"><label for="c-top">Top holders, max <output id="o-top">45%</output></label>
         <input id="c-top" type="range" min="20" max="80" step="1" value="45"></div>
       <div class="ctl"><label for="c-bun">Bundled buys, max <output id="o-bun">20%</output></label>
@@ -212,10 +225,18 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
     <main>
       <div class="manifest-head">
         <h2>Launch manifest</h2>
+        <div class="win-wrap">
+          <div class="seg" id="win" role="group" aria-label="Time window">
+            <button type="button" data-win="1h" aria-pressed="false">1H</button>
+            <button type="button" data-win="6h" aria-pressed="false">6H</button>
+            <button type="button" data-win="24h" aria-pressed="true">24H</button>
+          </div>
+          <span class="hint" id="win-note"></span>
+        </div>
         <p class="count" id="count"></p>
       </div>
       <div class="cols" aria-hidden="true">
-        <span>#</span><span></span><span>Token</span><span class="r">24h</span><span class="r">Volume</span><span class="r">Buyers</span><span>Score</span><span>Status</span>
+        <span>#</span><span></span><span>Token</span><span class="r" id="col-chg">24h</span><span class="r">Volume</span><span class="r">Buyers</span><span>Score</span><span>Status</span>
       </div>
       <div class="rows" id="rows"></div>
       <details class="held" id="held"></details>
@@ -223,7 +244,7 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
         <summary>How the pad score works</summary>
         <div>
           <p>Each token scores out of 100 from four signals. Raw volume is easy to fake with wash trading, so the weight sits on who is buying and how the volume is trending.</p>
-          <p><code>35</code> unique buyers in 24h (organic buyers when the feed provides them, full marks at 5,000) · <code>30</code> volume momentum, the last 6 hours against the 18 before (full marks at 3x) · <code>20</code> holder spread, from the top holders' share · <code>15</code> bundle cleanliness, from the share of bundled buys.</p>
+          <p><code>35</code> unique buyers in the chosen window (organic buyers when the feed provides them, full marks at <span id="how-buyers">5K</span>) · <code>30</code> volume momentum, the last 6 hours against the 18 before (full marks at 3x) · <code>20</code> holder spread, from the top holders' share · <code>15</code> bundle cleanliness, from the share of bundled buys.</p>
           <p>When a feed does not provide a signal, it is marked no data and left out, and the score is scaled over the signals that remain. Range safety is separate from the score. A token that misses a limit is held back no matter how high it would score.</p>
         </div>
       </details>

@@ -5,7 +5,7 @@
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
-const { createFeed, CATEGORIES } = require('./feed');
+const { createFeed, WINDOWS } = require('./feed');
 
 const PUBLIC_DIR = path.join(__dirname, 'public');
 
@@ -55,11 +55,11 @@ function createApp(opts) {
 
     // Trending tokens, cached server-side so the upstream API key stays private.
     if (pathname === '/api/trending') {
-      const category = url.searchParams.get('category') || 'toptrending';
-      if (CATEGORIES.indexOf(category) === -1) {
-        return send(res, 400, JSON.stringify({ error: 'bad_category' }), JSON_TYPE);
+      const win = url.searchParams.get('window') || '24h';
+      if (WINDOWS.indexOf(win) === -1) {
+        return send(res, 400, JSON.stringify({ error: 'bad_window' }), JSON_TYPE);
       }
-      feed.get(category).then(result => {
+      feed.get(win).then(result => {
         const headers = Object.assign({}, JSON_TYPE, { 'Cache-Control': result.status === 200 ? 'public, max-age=30' : 'no-store' });
         send(res, result.status, req.method === 'HEAD' ? '' : JSON.stringify(result.body), headers);
       }).catch(() => {

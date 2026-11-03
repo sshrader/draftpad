@@ -25,7 +25,7 @@ The server calls Jupiter's Tokens API v2 (`/tokens/v2/toptrending/24h`), keeps t
 | `JUPITER_BASE` | Override the API base URL, default `https://api.jup.ag`. |
 | `PORT` | Set by Railway. |
 
-`/healthz` returns `{"ok":true,"liveFeed":true}` so you can confirm the key is set without exposing it. `/api/trending?category=toptraded` switches the ranking.
+`/healthz` returns `{"ok":true,"liveFeed":true}` so you can confirm the key is set without exposing it. `/api/trending?window=1h|6h|24h` (default `24h`) returns the candidate pool for that window. Each pool merges Jupiter's trending list, its most-traded list and its newest listings (up to 100 each), then drops duplicates, so fresh launches are not buried under older tokens. The page's 1H / 6H / 24H toggle drives it, and the Maximum age filter (default 7 days) keeps the board to young tokens.
 
 What the feed provides and what it does not:
 
@@ -60,7 +60,7 @@ Token names and symbols come from the market and are untrusted text. The server 
 
 ## How the pad score works
 
-Each token scores out of 100: 35 for unique buyers (full marks at 5,000), 30 for volume momentum (the last 6 hours against the 18 before, full marks at 3x), 20 for holder spread, and 15 for bundle cleanliness. A signal with no data is left out and the total is scaled over the rest. Range safety is separate: a token that misses a limit is held back however high it would score.
+Each token scores out of 100: 35 for unique buyers in the chosen window (full marks at 5,000 for sample data; for live data 60, 200 or 500 for 1h, 6h or 24h, since Jupiter's organic-buyer counts are small), 30 for volume momentum (the last 6 hours against the 18 before, full marks at 3x), 20 for holder spread, and 15 for bundle cleanliness. A signal with no data is left out and the total is scaled over the rest. Range safety is separate: a token that misses a limit is held back however high it would score.
 
 Fixed checks that are not sliders: tokens Jupiter flags as suspicious fail, a dev balance above 10% is a warning, and above 25% fails.
 

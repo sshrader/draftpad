@@ -238,7 +238,6 @@
     return {
       platformFeePct: PLATFORM_FEE, creatorFeePct: c,
       walletCapPct: +$('f-cap').value,
-      vestDays: $('f-vest').checked ? +$('f-vestd').value : 0,
       bonusPct: +$('f-bonus').value, claimDays: +$('f-claim').value
     };
   }
@@ -277,8 +276,7 @@
     $('sheet').hidden = true;
     renderVamp();
   });
-  ['f-fee', 'f-cap', 'f-vest', 'f-vestd', 'f-bonus', 'f-claim'].forEach(id => $(id).addEventListener('input', () => renderVamp()));
-  $('f-vest').addEventListener('change', () => renderVamp());
+  ['f-fee', 'f-cap', 'f-bonus', 'f-claim'].forEach(id => $(id).addEventListener('input', () => renderVamp()));
 
   function renderAll() {
     compute();
@@ -396,7 +394,6 @@
   }
   $('f-fee').addEventListener('input', feeLine);
   feeLine();
-  $('f-vest').addEventListener('change', () => { $('f-vestd').disabled = !$('f-vest').checked; });
 
   function showErr(id, msg) {
     const el = $(id);
@@ -446,7 +443,7 @@
       pairsAgainst: $('f-quote').value,
       fees: { platformPct: PLATFORM_FEE, creatorPct: +c.toFixed(2), totalPct: +(PLATFORM_FEE + c).toFixed(2) },
       walletCapFirst10Min: $('f-cap').value === '0' ? 'none' : $('f-cap').value + '% of supply',
-      creatorVesting: $('f-vest').checked ? $('f-vestd').value + ' days' : 'none',
+      creatorAllocation: 'none, the creator buys on the curve like everyone else',
       status: 'staged in prototype, not deployed'
     };
     if (state.vamp) {

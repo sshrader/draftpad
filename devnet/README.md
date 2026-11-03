@@ -44,12 +44,11 @@ State (config, pool, token mint) is saved in `devnet/state.json`. Keys are in `d
 | Anti-sniper | Fee scheduler starts at 50% and decays | `START_FEE_BPS` to change |
 | Pairs against | Quote mint | SOL only for now |
 | Wallet cap, first 10 min | Not applied | No native DBC feature found |
-| Creator vesting | Not applied yet | `lockedVesting` is tested after the base lifecycle works |
+| Creator allocation and vesting | Removed | Decided: no creator allocation. Creators buy on the curve like everyone else, so there is nothing to vest. DBC's `lockedVesting` is left at zero. |
 | Holder offer | Not applied | Needs the separate claim program |
 
 ## Not done yet
 
 - Fees earned after migration (they come from the DAMM v2 pool's locked liquidity, not the curve).
-- Vesting test.
 - Migration needs the devnet DAMM v2 config address, which I did not find in the docs I read.
 - A mainnet review. Do not point any of this at mainnet.

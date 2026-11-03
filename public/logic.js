@@ -121,7 +121,7 @@
 
   // Side-by-side terms for a vamp offer. The original's numbers come from the feed and are
   // "n/a" when the feed lacks them; the right-hand side is what the creator has set (planned).
-  // p: { platformFeePct, creatorFeePct, walletCapPct (0 = none), vestDays (0 = none), bonusPct, claimDays }
+  // p: { platformFeePct, creatorFeePct, walletCapPct (0 = none), bonusPct, claimDays }
   function vampTerms(t, p) {
     const auth = v => (v === true ? 'Revoked' : (v === false ? 'Still active' : 'Unknown'));
     return [
@@ -129,7 +129,7 @@
       { label: 'Top holders', original: isNum(t.top10) ? pct(t.top10) + ' of supply' : 'n/a', yours: p.walletCapPct > 0 ? 'Max ' + p.walletCapPct + '% per wallet, first 10 min' : 'No wallet cap' },
       { label: 'Mint authority', original: auth(t.mintRevoked), yours: 'Revoked at launch' },
       { label: 'Freeze authority', original: auth(t.freezeRevoked), yours: 'Revoked at launch' },
-      { label: 'Dev holding', original: isNum(t.devPct) ? pct(t.devPct) : 'n/a', yours: p.vestDays > 0 ? 'Vested over ' + p.vestDays + ' days' : 'Not vested' },
+      { label: 'Dev holding', original: isNum(t.devPct) ? pct(t.devPct) : 'n/a', yours: 'No creator allocation; creators buy on the curve' },
       { label: 'Trading fee', original: 'Not in feed', yours: (p.platformFeePct + p.creatorFeePct).toFixed(2) + '%' },
       { label: 'Holder bonus', original: 'None', yours: p.bonusPct > 0 ? p.bonusPct + '% of supply, claim within ' + p.claimDays + ' days' : 'None' }
     ];

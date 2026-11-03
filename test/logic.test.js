@@ -86,7 +86,7 @@ test('isMint accepts Solana addresses and rejects everything else', () => {
 
 test('vamp terms set the original token beside the creator plan', () => {
   const t = { liq: 150000, top10: 22.5, mintRevoked: true, freezeRevoked: null, devPct: 3 };
-  const plan = { platformFeePct: 0.5, creatorFeePct: 0.3, walletCapPct: 2, vestDays: 60, bonusPct: 5, claimDays: 14 };
+  const plan = { platformFeePct: 0.5, creatorFeePct: 0.3, walletCapPct: 2, bonusPct: 5, claimDays: 14 };
   const rows = L.vampTerms(t, plan);
   const by = k => rows.find(r => r.label === k);
   assert.equal(rows.length, 7);
@@ -95,13 +95,12 @@ test('vamp terms set the original token beside the creator plan', () => {
   assert.equal(by('Top holders').yours, 'Max 2% per wallet, first 10 min');
   assert.equal(by('Mint authority').original, 'Revoked');
   assert.equal(by('Freeze authority').original, 'Unknown');
-  assert.equal(by('Dev holding').yours, 'Vested over 60 days');
+  assert.equal(by('Dev holding').yours, 'No creator allocation; creators buy on the curve');
   assert.equal(by('Trading fee').yours, '0.80%');
   assert.equal(by('Holder bonus').yours, '5% of supply, claim within 14 days');
-  const bare = L.vampTerms({}, { platformFeePct: 0.5, creatorFeePct: 0.1, walletCapPct: 0, vestDays: 0, bonusPct: 0, claimDays: 7 });
+  const bare = L.vampTerms({}, { platformFeePct: 0.5, creatorFeePct: 0.1, walletCapPct: 0, bonusPct: 0, claimDays: 7 });
   assert.equal(bare.find(r => r.label === 'Liquidity').original, 'n/a');
   assert.equal(bare.find(r => r.label === 'Top holders').yours, 'No wallet cap');
-  assert.equal(bare.find(r => r.label === 'Dev holding').yours, 'Not vested');
   assert.equal(bare.find(r => r.label === 'Holder bonus').yours, 'None');
 });
 

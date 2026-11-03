@@ -75,7 +75,6 @@ export function fromSheet(file) {
   if (!(total > 0) || !(creator >= 0)) throw new Error('The sheet has no fees block. Use "Copy settings" on a staged launch.');
   const ignored = [];
   if (sheet.walletCapFirst10Min && sheet.walletCapFirst10Min !== 'none') ignored.push('walletCapFirst10Min (no native DBC feature found)');
-  if (sheet.creatorVesting && sheet.creatorVesting !== 'none') ignored.push('creatorVesting (tested separately, after the base lifecycle works)');
   if (sheet.vampOffer) ignored.push('vampOffer (needs the separate claim program)');
   if (sheet.pairsAgainst && sheet.pairsAgainst !== 'SOL') ignored.push('pairsAgainst ' + sheet.pairsAgainst + ' (first run is SOL only)');
   return {

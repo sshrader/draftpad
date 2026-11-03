@@ -1,11 +1,12 @@
 {
   "name": "draftpad",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Prototype launchpad front end: ranks trending Solana tokens, screens them with range-safety limits, and stages a launch inspired by one.",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"

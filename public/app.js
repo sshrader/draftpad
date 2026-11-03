@@ -1,0 +1,334 @@
+/* Draftpad page logic: loads the live feed (falling back to sample data), renders the
+   manifest and pad panel, and runs the launch form. Depends on logic.js and sample.js. */
+(function () {
+  'use strict';
+
+  const L = window.DraftpadLogic;
+  const SAMPLE = window.DraftpadSample.SAMPLE;
+  const { isNum, money, count, pct, ageLabel, esc, computeScore, evaluate, tooClose, WEIGHTS } = L;
+  const $ = id => document.getElementById(id);
+
+  const PLATFORM_FEE = 0.5;
+  const REFRESH_MS = 5 * 60 * 1000;
+  const STATUS = { pass: ['pass', '● GO'], watch: ['watch', '▲ HOLD'], fail: ['fail', '✕ NO-GO'] };
+  const CHECK_TAG = { pass: 'PASS', watch: 'WATCH', fail: 'FAIL', na: 'N/A' };
+
+  const state = { f: { minLiq: 25000, minAge: 6, maxTop10: 45, maxBundled: 20, needRevoked: true }, sort: 'score', sel: null };
+  let TOKENS = SAMPLE;
+  let mode = 'sample';
+  let view = { top: [], passing: [], held: [] };
+
+  /* ---------- Data ---------- */
+  function compute() {
+    const rows = TOKENS.map(t => ({ t, ev: evaluate(t, state.f), sc: computeScore(t) }));
+    const key = {
+      score: r => r.sc.total,
+      vol: r => r.t.vol24,
+      buyers: r => (isNum(r.t.buyers) ? r.t.buyers : -1),
+      chg: r => (isNum(r.t.chg) ? r.t.chg : -Infinity)
+    }[state.sort];
+    const passing = rows.filter(r => r.ev.status !== 'fail').sort((a, b) => key(b) - key(a) || b.t.vol24 - a.t.vol24);
+    const held = rows.filter(r => r.ev.status === 'fail');
+    view = { top: passing.slice(0, 10), passing, held };
+    if (!view.top.some(r => r.t.id === state.sel)) state.sel = view.top.length ? view.top[0].t.id : null;
+  }
+
+  function markStyle(sym) {
+    let h = 0;
+    for (const ch of sym) h = (h * 31 + ch.charCodeAt(0)) % 360;
+    return 'background:hsl(' + h + ' 38% 20%);color:hsl(' + h + ' 75% 78%);border:1px solid hsl(' + h + ' 35% 32%)';
+  }
+  function changeText(chg) {
+    return isNum(chg) ? (chg >= 0 ? '+' : '') + Math.round(chg) + '%' : '–';
+  }
+
+  /* ---------- Manifest ---------- */
+  function renderBoard() {
+    const rows = $('rows');
+    if (!view.top.length) {
+      rows.innerHTML = '<div class="empty">No token clears these limits. Loosen a setting above.</div>';
+    } else {
+      rows.innerHTML = view.top.map((r, i) => {
+        const t = r.t;
+        const s = STATUS[r.ev.status];
+        const cls = isNum(t.chg) ? (t.chg >= 0 ? ' up' : ' down') : '';
+        const initials = Array.from(t.sym).slice(0, 2).join('');
+        return '<button type="button" class="row" data-id="' + esc(t.id) + '" aria-pressed="' + (t.id === state.sel) + '">' +
+          '<span class="rank">' + String(i + 1).padStart(2, '0') + '</span>' +
+          '<span class="mark" style="' + markStyle(t.sym) + '">' + esc(initials) + '</span>' +
+          '<span class="who"><b>' + esc(t.name) + '</b><i>$' + esc(t.sym) + ' · ' + ageLabel(t.ageH) + ' old</i></span>' +
+          '<span class="stats">' +
+          '<span class="num' + cls + '" data-l="24h">' + changeText(t.chg) + '</span>' +
+          '<span class="num" data-l="Vol">' + money(t.vol24) + '</span>' +
+          '<span class="num" data-l="Buyers">' + (isNum(t.buyers) ? count(t.buyers) : '–') + '</span></span>' +
+          '<span class="scorecell"><em>' + r.sc.total + '</em><span class="bar"><span style="width:' + r.sc.total + '%"></span></span></span>' +
+          '<span class="pill ' + s[0] + '">' + s[1] + '</span></button>';
+      }).join('');
+    }
+    $('count').textContent = 'Showing ' + view.top.length + ' of ' + view.passing.length + ' passing · ' + view.held.length + ' held back';
+    const held = $('held');
+    held.hidden = !view.held.length;
+    held.innerHTML = '<summary>Held back by range safety (' + view.held.length + ')</summary><ul>' +
+      view.held.map(r => '<li><b>' + esc(r.t.name) + '</b><span class="mono muted">$' + esc(r.t.sym) + '</span><span class="why">' +
+        esc(r.ev.checks.filter(c => c.status === 'fail').map(c => c.label + ' ' + c.value + (c.limit ? ' (' + c.limit + ')' : '')).join(' · ')) +
+        '</span></li>').join('') + '</ul>';
+  }
+
+  /* ---------- Pad panel ---------- */
+  function renderSpark(t) {
+    const title = $('p-spark-title');
+    const axis = $('p-axis');
+    const box = $('p-spark');
+
+    if (Array.isArray(t.series)) {
+      title.textContent = 'Hourly volume, last 24h';
+      const max = Math.max.apply(null, t.series);
+      box.innerHTML = '<svg class="spark" viewBox="0 0 240 64" preserveAspectRatio="none" role="img" aria-label="Hourly volume for the last 24 hours">' +
+        t.series.map((v, i) => {
+          const h = Math.max(2, v / max * 62);
+          return '<rect class="' + (i >= 18 ? 'hot' : '') + '" x="' + (i * 10) + '" y="' + (64 - h).toFixed(1) + '" width="8" height="' + h.toFixed(1) + '"/>';
+        }).join('') + '</svg>';
+      axis.className = 'axis';
+      axis.innerHTML = '<span>-24h</span><span>now</span>';
+      return;
+    }
+
+    title.textContent = 'Average volume per hour, by window';
+    const w = t.win || {};
+    const bars = [];
+    if (isNum(w.h24) && isNum(w.h6) && w.h24 > w.h6) bars.push({ label: 'prior 18h', v: (w.h24 - w.h6) / 18 });
+    if (isNum(w.h1) && isNum(w.h6) && w.h6 >= w.h1) bars.push({ label: 'prior 5h', v: (w.h6 - w.h1) / 5 });
+    if (isNum(w.h1)) bars.push({ label: 'last 1h', v: w.h1 });
+    else if (isNum(w.h6)) bars.push({ label: 'last 6h', v: w.h6 / 6 });
+    if (bars.length < 2) {
+      box.innerHTML = '<p class="hint">The feed has no volume breakdown for this token.</p>';
+      axis.innerHTML = '';
+      return;
+    }
+    const n = bars.length;
+    const gap = 12;
+    const bw = (240 - gap * (n - 1)) / n;
+    const max = Math.max.apply(null, bars.map(b => b.v)) || 1;
+    box.innerHTML = '<svg class="spark" viewBox="0 0 240 64" preserveAspectRatio="none" role="img" aria-label="Average hourly volume by time window">' +
+      bars.map((b, i) => {
+        const h = Math.max(2, b.v / max * 62);
+        return '<rect class="' + (i === n - 1 ? 'hot' : '') + '" x="' + (i * (bw + gap)).toFixed(1) + '" y="' + (64 - h).toFixed(1) + '" width="' + bw.toFixed(1) + '" height="' + h.toFixed(1) + '"/>';
+      }).join('') + '</svg>';
+    axis.className = 'axis cols';
+    axis.innerHTML = bars.map(b => '<span>' + b.label + '<br><b>' + money(b.v) + '/h</b></span>').join('');
+  }
+
+  function renderPad(keepForm) {
+    const r = view.top.find(x => x.t.id === state.sel);
+    $('pad-empty').hidden = !!r;
+    $('pad-body').hidden = !r;
+    if (!r) return;
+    const t = r.t;
+    const pos = view.top.indexOf(r) + 1;
+
+    $('p-no').textContent = 'PAD ' + String(pos).padStart(2, '0');
+    $('p-name').textContent = t.name;
+    $('p-sub').textContent = '$' + t.sym + ' · ' + money(t.vol24) + ' volume · ' + changeText(t.chg) + ' · ' +
+      (isNum(t.holders) ? count(t.holders) + ' holders' : 'holders n/a');
+    renderSpark(t);
+
+    $('p-total').textContent = r.sc.total + ' / 100';
+    const labels = {
+      buyers: 'Unique buyers (' + (isNum(t.buyers) ? count(t.buyers) : 'no data') + ')',
+      momentum: 'Volume momentum (' + (r.sc.ratio === null ? 'no data' : r.sc.ratio.toFixed(1) + 'x') + ')',
+      spread: 'Holder spread (top holders own ' + (isNum(t.top10) ? pct(t.top10) : 'no data') + ')',
+      clean: 'Bundle cleanliness (' + (isNum(t.bundled) ? pct(t.bundled) + ' bundled' : 'no data') + ')'
+    };
+    $('p-parts').innerHTML = Object.keys(WEIGHTS).map(k => {
+      const p = r.sc.parts[k];
+      if (p === null) return '<div class="part"><span>' + labels[k] + '</span><span class="pts">not scored</span></div>';
+      return '<div class="part"><span>' + labels[k] + '</span><span class="pts">' + p.toFixed(1) + '/' + WEIGHTS[k] +
+        '</span><span class="bar"><span style="width:' + (p / WEIGHTS[k] * 100).toFixed(0) + '%"></span></span></div>';
+    }).join('') + (r.sc.coverage < 100
+      ? '<p class="hint" style="margin:6px 0 0">Scaled over the ' + r.sc.coverage + ' of 100 weight that has data.</p>' : '');
+
+    $('p-checks').innerHTML = r.ev.checks.map(c =>
+      '<li class="chk ' + c.status + '"><span class="ck">' + CHECK_TAG[c.status] + '</span><span>' + c.label +
+      '<span class="cv">' + esc(c.value) + (c.limit ? ' · ' + c.limit : '') + '</span></span></li>').join('');
+
+    $('l-src').textContent = t.name + ' ($' + t.sym + ')';
+    $('credit').textContent = 'Listing credit, always on: "Inspired by ' + t.name + ' ($' + t.sym + '). Not affiliated."';
+    if (!keepForm) {
+      $('sheet').hidden = true;
+      ['e-name', 'e-sym', 'e-art'].forEach(id => { $(id).hidden = true; });
+    }
+  }
+
+  function renderAll() {
+    compute();
+    renderBoard();
+    renderPad(false);
+  }
+
+  /* ---------- Filters and selection ---------- */
+  function readFilters() {
+    state.f.minLiq = +$('c-liq').value;
+    state.f.minAge = +$('c-age').value;
+    state.f.maxTop10 = +$('c-top').value;
+    state.f.maxBundled = +$('c-bun').value;
+    state.f.needRevoked = $('c-auth').checked;
+    state.sort = $('c-sort').value;
+    $('o-top').textContent = state.f.maxTop10 + '%';
+    $('o-bun').textContent = state.f.maxBundled + '%';
+    renderAll();
+  }
+  ['c-liq', 'c-age', 'c-top', 'c-bun', 'c-auth', 'c-sort'].forEach(id => $(id).addEventListener('input', readFilters));
+
+  $('rows').addEventListener('click', e => {
+    const b = e.target.closest('.row');
+    if (!b) return;
+    state.sel = b.dataset.id;
+    renderBoard();
+    renderPad(false);
+    if (window.matchMedia('(max-width: 999px)').matches) {
+      const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      $('pad').scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    }
+  });
+
+  /* ---------- Live feed ---------- */
+  function setFeedUi(text, live) {
+    $('feed-text').textContent = text;
+    $('feed-led').className = 'led' + (live ? ' live' : '');
+  }
+
+  const LIVE_NOTE = 'Live data comes from Jupiter\'s token API through this site\'s server and refreshes every few minutes. ' +
+    'Bundled-buy share is not in that feed, so it shows as no data and is left out of the score. ' +
+    'Token names and symbols come from the market and can be misleading, so treat each one as untrusted.';
+
+  function sampleNote(why) {
+    const reason = why === 'not_configured'
+      ? 'The server has no Jupiter API key yet, so the live feed is off.'
+      : 'The live feed did not respond, so sample data is showing.';
+    return 'These 15 tokens are fictional sample data. ' + reason;
+  }
+
+  async function loadLive() {
+    try {
+      const res = await fetch('/api/trending', { headers: { Accept: 'application/json' } });
+      const body = await res.json().catch(() => null);
+      if (!res.ok || !body || !Array.isArray(body.tokens) || !body.tokens.length) {
+        return { ok: false, why: body && body.error ? body.error : 'http_' + res.status };
+      }
+      return { ok: true, body };
+    } catch (err) {
+      return { ok: false, why: 'network' };
+    }
+  }
+
+  function applyFeed(r) {
+    const prevSel = state.sel;
+    const prevMode = mode;
+    if (r.ok) {
+      TOKENS = r.body.tokens;
+      mode = 'live';
+      const when = new Date(r.body.fetchedAt).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+      setFeedUi('Live · Jupiter · updated ' + when + (r.body.stale ? ' · stale' : ''), true);
+      $('foot').textContent = LIVE_NOTE;
+    } else {
+      TOKENS = SAMPLE;
+      mode = 'sample';
+      setFeedUi('Sample data · 15 fictional tokens', false);
+      $('foot').textContent = sampleNote(r.why);
+    }
+    compute();
+    renderBoard();
+    renderPad(prevMode === mode && prevSel === state.sel);
+  }
+
+  /* ---------- Launch form ---------- */
+  function feeLine() {
+    const c = +$('f-fee').value;
+    $('o-fee').textContent = c.toFixed(2) + '%';
+    $('fee-line').textContent = 'Platform ' + PLATFORM_FEE.toFixed(2) + '% + creator ' + c.toFixed(2) + '% = ' + (PLATFORM_FEE + c).toFixed(2) + '% per trade (prototype defaults)';
+  }
+  $('f-fee').addEventListener('input', feeLine);
+  feeLine();
+  $('f-vest').addEventListener('change', () => { $('f-vestd').disabled = !$('f-vest').checked; });
+
+  function showErr(id, msg) {
+    const el = $(id);
+    el.textContent = msg;
+    el.hidden = false;
+  }
+
+  let artFile = null;
+  $('f-art').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    artFile = null;
+    $('art-prev').innerHTML = '';
+    $('e-art').hidden = true;
+    if (!f) return;
+    if (!f.type.startsWith('image/')) { showErr('e-art', 'Choose an image file.'); return; }
+    if (f.size > 2000000) { showErr('e-art', 'Use an image under 2 MB.'); return; }
+    artFile = f;
+    const rd = new FileReader();
+    rd.onload = () => {
+      const im = document.createElement('img');
+      im.alt = 'Preview of your artwork';
+      im.src = rd.result;
+      $('art-prev').appendChild(im);
+    };
+    rd.readAsDataURL(f);
+  });
+
+  $('launch').addEventListener('submit', e => {
+    e.preventDefault();
+    const r = view.top.find(x => x.t.id === state.sel);
+    if (!r) return;
+    const name = $('f-name').value.trim();
+    const sym = $('f-sym').value.trim().replace(/^\$/, '');
+    let ok = true;
+    ['e-name', 'e-sym', 'e-art'].forEach(id => { $(id).hidden = true; });
+    if (!name) { showErr('e-name', 'Enter a name for your token.'); ok = false; }
+    else if (tooClose(name, r.t.name, false)) { showErr('e-name', 'That reads too much like ' + r.t.name + '. Pick a name that stands on its own.'); ok = false; }
+    if (!sym) { showErr('e-sym', 'Enter a ticker.'); ok = false; }
+    else if (tooClose(sym, r.t.sym, true)) { showErr('e-sym', 'That ticker is too close to $' + r.t.sym + '. Pick a different one.'); ok = false; }
+    if (!artFile) { showErr('e-art', 'Add your own artwork. The original token\'s art is not reused.'); ok = false; }
+    if (!ok) return;
+
+    const c = +$('f-fee').value;
+    const cfg = {
+      token: { name: name, ticker: '$' + sym.toUpperCase(), artwork: artFile.name },
+      inspiredBy: { name: r.t.name, ticker: '$' + r.t.sym, listingCredit: 'Inspired by ' + r.t.name + '. Not affiliated.' },
+      pairsAgainst: $('f-quote').value,
+      fees: { platformPct: PLATFORM_FEE, creatorPct: +c.toFixed(2), totalPct: +(PLATFORM_FEE + c).toFixed(2) },
+      walletCapFirst10Min: $('f-cap').value === '0' ? 'none' : $('f-cap').value + '% of supply',
+      creatorVesting: $('f-vest').checked ? $('f-vestd').value + ' days' : 'none',
+      status: 'staged in prototype, not deployed'
+    };
+    $('sheet-json').textContent = JSON.stringify(cfg, null, 2);
+    $('copied').hidden = true;
+    $('sheet').hidden = false;
+    $('sheet').scrollIntoView({ behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'nearest' });
+  });
+
+  $('copy').addEventListener('click', () => {
+    const pre = $('sheet-json');
+    const note = $('copied');
+    const done = msg => { note.textContent = msg; note.hidden = false; };
+    const select = () => {
+      const rg = document.createRange();
+      rg.selectNodeContents(pre);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(rg);
+      done('Press copy on your keyboard to finish.');
+    };
+    try {
+      navigator.clipboard.writeText(pre.textContent).then(() => done('Copied.'), select);
+    } catch (err) { select(); }
+  });
+
+  /* ---------- Start ---------- */
+  setFeedUi('Loading live feed…', false);
+  $('foot').textContent = '';
+  renderAll();
+  loadLive().then(applyFeed);
+  setInterval(() => { loadLive().then(applyFeed); }, REFRESH_MS);
+})();

@@ -11,9 +11,12 @@
     "buy": "node 03-buy.mjs",
     "migrate": "node 04-migrate.mjs",
     "claim": "node 05-claim-fees.mjs",
-    "presets": "node 06-create-presets.mjs"
+    "presets": "node 06-create-presets.mjs",
+    "inspect": "node 07-inspect.mjs"
   },
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
     "@meteora-ag/dynamic-bonding-curve-sdk": "latest",
     "@solana/spl-token": "^0.4.9",

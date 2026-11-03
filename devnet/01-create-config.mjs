@@ -82,6 +82,7 @@ const tx = await create({
 });
 
 await send(tx, [partner, config], 'create config');
-writeState({ config: config.publicKey.toBase58(), thresholdSol });
+// A new config starts a new launch, so forget the previous pool.
+writeState({ config: config.publicKey.toBase58(), thresholdSol, pool: null, baseMint: null, creator: null, name: terms.name || null, symbol: terms.symbol || null });
 console.log('Config: ' + config.publicKey.toBase58());
 console.log('Steady fee ' + terms.steadyFeeBps + ' bps, creator share ' + terms.creatorSharePct + '%, migrates at ' + thresholdSol + ' SOL.');

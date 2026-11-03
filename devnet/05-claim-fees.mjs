@@ -1,6 +1,7 @@
 // Shows the trading fees earned on the curve and claims the partner (platform) and creator shares.
 // Usage: node 05-claim-fees.mjs
-// Both roles use the "partner" wallet in this spike, so the two shares land in the same place.
+// The platform share goes to the partner wallet. The creator share goes to the wallet that launched the
+// token (state.creator, set in step 2; partner if none).
 // Only fees earned on the curve (before migration) are covered here. Fees after migration come from
 // the DAMM v2 pool's locked liquidity position, which is a separate step.
 import BN from 'bn.js';
@@ -10,7 +11,9 @@ import { client, connection, loadKey, send, readState, sol } from './lib.mjs';
 const state = readState();
 if (!state.pool) { console.error('No pool yet. Run the earlier steps first.'); process.exit(1); }
 
-const wallet = loadKey('partner');
+const partnerWallet = loadKey('partner');
+const creatorName = state.creator || 'partner';
+const creatorWallet = loadKey(creatorName);
 const pool = new PublicKey(state.pool);
 const { dbc } = await client();
 const MAX = new BN('18446744073709551615');
@@ -26,27 +29,30 @@ try {
   console.log('Could not read the fee breakdown: ' + (err.message || err));
 }
 
-const before = await connection.getBalance(wallet.publicKey);
+const beforeP = await connection.getBalance(partnerWallet.publicKey);
+const beforeC = await connection.getBalance(creatorWallet.publicKey);
 
-async function claim(label, build) {
+async function claim(label, build, signer) {
   try {
     const tx = await build();
-    await send(tx, [wallet], label);
+    await send(tx, [signer], label);
   } catch (err) {
     console.log(label + ' failed: ' + (err.message || err));
   }
 }
 
 await claim('claim partner (platform) fees', () => dbc.partner.claimPartnerTradingFeeToReceiver({
-  feeClaimer: wallet.publicKey, payer: wallet.publicKey, pool,
-  maxBaseAmount: MAX, maxQuoteAmount: MAX, receiver: wallet.publicKey
-}));
+  feeClaimer: partnerWallet.publicKey, payer: partnerWallet.publicKey, pool,
+  maxBaseAmount: MAX, maxQuoteAmount: MAX, receiver: partnerWallet.publicKey
+}), partnerWallet);
 
 await claim('claim creator fees', () => dbc.creator.claimCreatorTradingFeeToReceiver({
-  creator: wallet.publicKey, payer: wallet.publicKey, pool,
-  maxBaseAmount: MAX, maxQuoteAmount: MAX, receiver: wallet.publicKey
-}));
+  creator: creatorWallet.publicKey, payer: creatorWallet.publicKey, pool,
+  maxBaseAmount: MAX, maxQuoteAmount: MAX, receiver: creatorWallet.publicKey
+}), creatorWallet);
 
-const after = await connection.getBalance(wallet.publicKey);
-console.log('Partner wallet SOL: ' + sol(before).toFixed(6) + ' -> ' + sol(after).toFixed(6) + ' (network fees are included in the change)');
-console.log('If the fees came back as wrapped SOL, they sit in a token account instead of the SOL balance. Check the explorer links above.');
+const afterP = await connection.getBalance(partnerWallet.publicKey);
+const afterC = await connection.getBalance(creatorWallet.publicKey);
+console.log('Partner wallet SOL: ' + sol(beforeP).toFixed(6) + ' -> ' + sol(afterP).toFixed(6));
+if (creatorName !== 'partner') console.log('Creator (' + creatorName + ') SOL: ' + sol(beforeC).toFixed(6) + ' -> ' + sol(afterC).toFixed(6) + '  (this wallet also bought, so its balance includes that spending)');
+console.log('Network fees are included in these changes. Fees paid as wrapped SOL sit in a token account instead; check the explorer links.');

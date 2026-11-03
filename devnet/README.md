@@ -52,3 +52,18 @@ State (config, pool, token mint) is saved in `devnet/state.json`. Keys are in `d
 - Fees earned after migration (they come from the DAMM v2 pool's locked liquidity, not the curve).
 - Migration needs the devnet DAMM v2 config address, which I did not find in the docs I read.
 - A mainnet review. Do not point any of this at mainnet.
+
+## Second run: the page's launch sheet and a separate creator wallet
+
+This repeats the lifecycle with the settings the page produces, and a different wallet as the creator so the platform and creator payouts land in different places. The buyer wallet doubles as the creator.
+
+```powershell
+$env:THRESHOLD_SOL = "1"
+npm run config -- --sheet sample-launch-sheet.json   # 1% fee, creator keeps 40%
+npm run pool -- --creator buyer                      # name and ticker come from the sheet
+npm run buy
+npm run migrate
+npm run claim
+```
+
+Expected: the fee breakdown shows the creator at 40% of the total (the first run used 37%), and the claim script prints separate balance changes for the two wallets. The wallet cap in the sheet is reported as not applied.

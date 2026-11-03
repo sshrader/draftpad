@@ -1,0 +1,9 @@
+{
+  "token": { "name": "Salt Lantern", "ticker": "$LNTRN", "artwork": "mine.png" },
+  "inspiredBy": { "name": "Example Token", "ticker": "$EXT", "listingCredit": "Inspired by Example Token. Not affiliated." },
+  "pairsAgainst": "SOL",
+  "fees": { "totalPct": 1, "creatorSharePct": 40, "creatorPct": 0.4, "platformPct": 0.6 },
+  "walletCapFirst10Min": "2% of supply",
+  "creatorAllocation": "none, the creator buys on the curve like everyone else",
+  "status": "staged in prototype, not deployed"
+}

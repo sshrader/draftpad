@@ -6,7 +6,7 @@
   const L = window.DraftpadLogic;
   // Sample tokens carry a 24h volume only; the page reads the volume for the chosen window as `vol`.
   const SAMPLE = window.DraftpadSample.SAMPLE.map(t => Object.assign({ vol: t.vol24 }, t));
-  const { isNum, money, count, pct, ageLabel, esc, computeScore, evaluate, withinAge, tooClose, WEIGHTS, BUYERS_FULL } = L;
+  const { isNum, money, count, pct, ageLabel, esc, computeScore, evaluate, withinAge, isMint, vampTerms, tooClose, WEIGHTS, BUYERS_FULL } = L;
   const $ = id => document.getElementById(id);
 
   const PLATFORM_FEE = 0.5;
@@ -17,7 +17,7 @@
   const STATUS = { pass: ['pass', '● GO'], watch: ['watch', '▲ HOLD'], fail: ['fail', '✕ NO-GO'] };
   const CHECK_TAG = { pass: 'PASS', watch: 'WATCH', fail: 'FAIL', na: 'N/A' };
 
-  const state = { f: { minLiq: 25000, minAge: 6, maxTop10: 45, maxBundled: 20, needRevoked: true }, maxAge: 168, win: '24h', sort: 'score', sel: null };
+  const state = { f: { minLiq: 25000, minAge: 6, maxTop10: 45, maxBundled: 20, needRevoked: true }, maxAge: 168, win: '24h', sort: 'score', sel: null, vamp: false };
   let TOKENS = SAMPLE;
   let mode = 'sample';
   let view = { top: [], passing: [], held: [], tooOld: 0 };
@@ -53,6 +53,39 @@
     return isNum(chg) ? (chg >= 0 ? '+' : '') + Math.round(chg) + '%' : '–';
   }
 
+  /* ---------- Contract address ---------- */
+  function shortCa(id) { return id.slice(0, 6) + '…' + id.slice(-6); }
+  // Sits beside the row, never inside it, because a button cannot hold another button.
+  function caStrip(t) {
+    if (!isMint(t.id)) {
+      return '<div class="castrip"><span class="calab">CA</span><span class="muted">Sample token, no address</span></div>';
+    }
+    return '<div class="castrip"><span class="calab">CA</span><code class="cavalue" title="' + esc(t.id) + '">' + esc(shortCa(t.id)) + '</code>' +
+      '<button type="button" class="ca-copy" data-ca="' + esc(t.id) + '" aria-label="Copy contract address for ' + esc(t.name) + '">Copy</button>' +
+      '<a class="ca-link" href="https://solscan.io/token/' + esc(t.id) + '" target="_blank" rel="noopener noreferrer">Solscan ↗</a></div>';
+  }
+
+  // Copy with a fallback that selects the address when the clipboard is blocked.
+  document.addEventListener('click', e => {
+    const b = e.target.closest('.ca-copy');
+    if (!b) return;
+    const ca = b.dataset.ca;
+    const flash = msg => { b.textContent = msg; setTimeout(() => { b.textContent = 'Copy'; }, 1600); };
+    const select = () => {
+      const code = b.parentNode.querySelector('.cavalue');
+      code.textContent = ca;
+      const rg = document.createRange();
+      rg.selectNodeContents(code);
+      const sel = window.getSelection();
+      sel.removeAllRanges();
+      sel.addRange(rg);
+      flash('Select + copy');
+    };
+    try {
+      navigator.clipboard.writeText(ca).then(() => flash('Copied'), select);
+    } catch (err) { select(); }
+  });
+
   /* ---------- Manifest ---------- */
   function renderBoard() {
     const rows = $('rows');
@@ -64,7 +97,7 @@
         const s = STATUS[r.ev.status];
         const cls = isNum(t.chg) ? (t.chg >= 0 ? ' up' : ' down') : '';
         const initials = Array.from(t.sym).slice(0, 2).join('');
-        return '<button type="button" class="row" data-id="' + esc(t.id) + '" aria-pressed="' + (t.id === state.sel) + '">' +
+        return '<div class="rowbox"><button type="button" class="row" data-id="' + esc(t.id) + '" aria-pressed="' + (t.id === state.sel) + '">' +
           '<span class="rank">' + String(i + 1).padStart(2, '0') + '</span>' +
           '<span class="mark" style="' + markStyle(t.sym) + '">' + esc(initials) + '</span>' +
           '<span class="who"><b>' + esc(t.name) + '</b><i>$' + esc(t.sym) + ' · ' + ageLabel(t.ageH) + ' old</i></span>' +
@@ -73,7 +106,7 @@
           '<span class="num" data-l="Vol">' + money(t.vol) + '</span>' +
           '<span class="num" data-l="Buyers">' + (isNum(t.buyers) ? count(t.buyers) : '–') + '</span></span>' +
           '<span class="scorecell"><em>' + r.sc.total + '</em><span class="bar"><span style="width:' + r.sc.total + '%"></span></span></span>' +
-          '<span class="pill ' + s[0] + '">' + s[1] + '</span></button>';
+          '<span class="pill ' + s[0] + '">' + s[1] + '</span></button>' + caStrip(t) + '</div>';
       }).join('');
     }
     $('count').textContent = 'Showing ' + view.top.length + ' of ' + view.passing.length + ' passing · ' + view.held.length + ' held back' +
@@ -167,6 +200,7 @@
     $('p-name').textContent = t.name;
     $('p-sub').textContent = '$' + t.sym + ' · ' + money(t.vol) + ' ' + activeWin() + ' volume · ' + changeText(t.chg) + ' · ' +
       (isNum(t.holders) ? count(t.holders) + ' holders' : 'holders n/a');
+    $('p-ca').innerHTML = caStrip(t);
     renderSpark(t);
 
     $('p-total').textContent = r.sc.total + ' / 100';
@@ -189,12 +223,64 @@
       '<span class="cv">' + esc(c.value) + (c.limit ? ' · ' + c.limit : '') + '</span></span></li>').join('');
 
     $('l-src').textContent = t.name + ' ($' + t.sym + ')';
-    $('credit').textContent = 'Listing credit, always on: "Inspired by ' + t.name + ' ($' + t.sym + '). Not affiliated."';
+    renderVamp(r);
     if (!keepForm) {
       $('sheet').hidden = true;
       ['e-name', 'e-sym', 'e-art'].forEach(id => { $(id).hidden = true; });
     }
   }
+
+  /* ---------- Vamp offer ---------- */
+  function vampPlan() {
+    const c = +$('f-fee').value;
+    return {
+      platformFeePct: PLATFORM_FEE, creatorFeePct: c,
+      walletCapPct: +$('f-cap').value,
+      vestDays: $('f-vest').checked ? +$('f-vestd').value : 0,
+      bonusPct: +$('f-bonus').value, claimDays: +$('f-claim').value
+    };
+  }
+
+  function renderVamp(r) {
+    r = r || view.top.find(x => x.t.id === state.sel);
+    if (!r) return;
+    const t = r.t;
+    const v = state.vamp;
+    Array.from(document.querySelectorAll('#vmode button')).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.mode === (v ? 'vamp' : 'fresh'))));
+    $('vamp').hidden = !v;
+    $('v-badge').hidden = !v;
+    $('v-badge').textContent = 'Vamp of ' + t.name;
+    $('vamp-go').hidden = v;
+    $('o-bonus').textContent = $('f-bonus').value + '%';
+    $('l-hint').textContent = v
+      ? 'Your token keeps its own name, ticker and artwork. The offer gives holders of ' + t.name + ' a reason to move, and they choose whether to.'
+      : 'Pick your own name, ticker and artwork, then set your own fees and pairing. The original token\'s identity is not reused.';
+    $('credit').textContent = v
+      ? 'Listing credit, always on: "Vamp offer for holders of ' + t.name + ' ($' + t.sym + '). Not affiliated. The original token is unchanged."'
+      : 'Listing credit, always on: "Inspired by ' + t.name + ' ($' + t.sym + '). Not affiliated."';
+    $('launch').querySelector('.go-btn[type=submit]').textContent = v ? 'Stage vamp offer' : 'Stage launch';
+    if (v) {
+      $('cmp').innerHTML = '<div class="h">Term</div><div class="h">Original</div><div class="h">Yours (planned)</div>' +
+        vampTerms(t, vampPlan()).map(row => '<div class="k">' + esc(row.label) + '</div><div>' + esc(row.original) + '</div><div class="y">' + esc(row.yours) + '</div>').join('');
+    }
+  }
+
+  function setMode(vamp, scroll) {
+    state.vamp = vamp;
+    $('sheet').hidden = true;
+    renderVamp();
+    if (scroll) {
+      const calm = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      $('launch').scrollIntoView({ behavior: calm ? 'auto' : 'smooth', block: 'start' });
+    }
+  }
+  $('vmode').addEventListener('click', e => {
+    const b = e.target.closest('button');
+    if (b) setMode(b.dataset.mode === 'vamp', false);
+  });
+  $('vamp-go').addEventListener('click', () => setMode(true, true));
+  ['f-fee', 'f-cap', 'f-vest', 'f-vestd', 'f-bonus', 'f-claim'].forEach(id => $(id).addEventListener('input', () => renderVamp()));
+  $('f-vest').addEventListener('change', () => renderVamp());
 
   function renderAll() {
     compute();
@@ -351,13 +437,25 @@
     const c = +$('f-fee').value;
     const cfg = {
       token: { name: name, ticker: '$' + sym.toUpperCase(), artwork: artFile.name },
-      inspiredBy: { name: r.t.name, ticker: '$' + r.t.sym, listingCredit: 'Inspired by ' + r.t.name + '. Not affiliated.' },
+      inspiredBy: { name: r.t.name, ticker: '$' + r.t.sym, listingCredit: (state.vamp ? 'Vamp offer for holders of ' : 'Inspired by ') + r.t.name + '. Not affiliated.' },
       pairsAgainst: $('f-quote').value,
       fees: { platformPct: PLATFORM_FEE, creatorPct: +c.toFixed(2), totalPct: +(PLATFORM_FEE + c).toFixed(2) },
       walletCapFirst10Min: $('f-cap').value === '0' ? 'none' : $('f-cap').value + '% of supply',
       creatorVesting: $('f-vest').checked ? $('f-vestd').value + ' days' : 'none',
       status: 'staged in prototype, not deployed'
     };
+    if (state.vamp) {
+      const plan = vampPlan();
+      cfg.vampOffer = {
+        original: { name: r.t.name, ticker: '$' + r.t.sym, mint: r.t.id },
+        holderBonusPctOfSupply: plan.bonusPct,
+        claimWindowDays: plan.claimDays,
+        unclaimed: 'burned',
+        optInClaim: true,
+        originalTokenAffected: false,
+        termsCompared: vampTerms(r.t, plan).map(x => ({ term: x.label, original: x.original, yours: x.yours }))
+      };
+    }
     $('sheet-json').textContent = JSON.stringify(cfg, null, 2);
     $('copied').hidden = true;
     $('sheet').hidden = false;

@@ -64,6 +64,12 @@ Each token scores out of 100: 35 for unique buyers in the chosen window (full ma
 
 Fixed checks that are not sliders: tokens Jupiter flags as suspicious fail, a dev balance above 10% is a warning, and above 25% fails.
 
+## Vamp offer and contract addresses
+
+Every row shows a shortened contract address with a Copy button (the full address goes to the clipboard) and a Solscan link. Sample tokens have no address, so they say so.
+
+**Vamp this token** switches the launch form to a vamp offer. Your token keeps its own name, ticker and artwork, with a "Vamp of X" badge and a listing credit that says it is not affiliated and the original token is unchanged. You set a holder bonus (0 to 15% of supply) and a claim window (7, 14 or 30 days). Holders of the original token opt in to claim, and unclaimed bonus tokens are burned. A comparison table sets the original's liquidity, top holders, authorities, dev holding and fees beside your planned terms, and the staged launch sheet includes all of it. Nothing is deployed. The snapshot, claim and burn mechanics need on-chain programs that are not built yet.
+
 ## Next
 
 - Bundled-buy data from a second source, so the last signal can be scored.

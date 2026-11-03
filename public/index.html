@@ -84,6 +84,34 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
 .seg button:disabled { cursor: default; opacity: 0.6; }
 .seg button:focus-visible { outline: 2px solid var(--xenon); outline-offset: -2px; }
 
+/* Contract address strip */
+.rowbox { display: flex; flex-direction: column; }
+.rowbox .row { border-bottom-left-radius: 0; border-bottom-right-radius: 0; border-bottom-color: var(--line); }
+.castrip { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 10px; background: var(--deck); border: 1px solid var(--line); border-top: 1px dashed var(--line); border-radius: 0 0 4px 4px; padding: 5px 14px 5px calc(14px + 2.2rem + 2.6rem + 24px); min-width: 0; }
+.rowbox:has(.row[aria-pressed="true"]) .castrip { border-color: var(--xenon); background: #12202e; }
+.pad-head .castrip { padding: 6px 10px; border: 1px solid var(--line); border-radius: 3px; background: var(--deck-2); margin-top: 10px; }
+.calab { font: 500 10.5px/1 var(--font-mono); letter-spacing: 0.12em; color: var(--muted); }
+.cavalue { font: 400 12px/1.4 var(--font-mono); color: var(--text); overflow-wrap: anywhere; }
+.ca-copy { font: 500 11px/1 var(--font-mono); letter-spacing: 0.06em; color: var(--xenon); background: transparent; border: 1px solid var(--line-2); border-radius: 2px; padding: 4px 8px; cursor: pointer; }
+.ca-copy:hover { border-color: var(--xenon); }
+.ca-copy:focus-visible, .ca-link:focus-visible { outline: 2px solid var(--xenon); outline-offset: 2px; }
+.ca-link { font: 400 11.5px/1.4 var(--font-mono); color: var(--muted); }
+.castrip .muted { font: 400 11.5px/1.4 var(--font-mono); }
+@media (max-width: 760px) { .castrip { padding-left: calc(14px + 1.8rem + 12px); } }
+
+/* Vamp offer */
+.modebar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-bottom: 10px; }
+.vbadge { font: 500 11px/1 var(--font-mono); letter-spacing: 0.1em; text-transform: uppercase; color: var(--xenon); border: 1px solid var(--xenon); border-radius: 2px; padding: 5px 8px; overflow-wrap: anywhere; min-width: 0; }
+.vamp-go { width: 100%; margin-top: 12px; }
+.vamp { border: 1px solid var(--xenon-dim); border-radius: 4px; padding: 12px; margin-bottom: 14px; background: #0e1a26; }
+.vh { margin: 0 0 6px; font: 800 1.1rem/1 var(--font-display); text-transform: uppercase; letter-spacing: 0.02em; }
+.hint.small { font-size: 12px; margin-bottom: 10px; }
+.cmp { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1fr) minmax(0, 1.2fr); gap: 1px; background: var(--line); border: 1px solid var(--line); }
+.cmp > div { background: var(--deck); padding: 6px 8px; font: 400 11.5px/1.4 var(--font-mono); overflow-wrap: anywhere; min-width: 0; }
+.cmp > .h { color: var(--muted); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+.cmp > .k { color: var(--muted); }
+.cmp > .y { color: var(--text); }
+
 /* Board */
 .board { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; align-items: start; }
 @media (min-width: 1000px) { .board { grid-template-columns: minmax(0, 1fr) 400px; } }
@@ -257,6 +285,8 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
           <span class="padno" id="p-no"></span>
           <h2 id="p-name"></h2>
           <p id="p-sub"></p>
+          <div id="p-ca"></div>
+          <button type="button" class="go-btn vamp-go" id="vamp-go">Vamp this token</button>
         </div>
         <section>
           <h3 class="label" id="p-spark-title">Hourly volume, last 24h</h3>
@@ -274,7 +304,14 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
         <section>
           <form id="launch" novalidate>
             <h3 class="label">Launch inspired by <span id="l-src"></span></h3>
-            <p class="hint">Pick your own name, ticker and artwork, then set your own fees and pairing. The original token's identity is not reused.</p>
+            <div class="modebar">
+              <div class="seg" id="vmode" role="group" aria-label="Launch type">
+                <button type="button" data-mode="fresh" aria-pressed="true">Fresh launch</button>
+                <button type="button" data-mode="vamp" aria-pressed="false">Vamp offer</button>
+              </div>
+              <span class="vbadge" id="v-badge" hidden></span>
+            </div>
+            <p class="hint" id="l-hint">Pick your own name, ticker and artwork, then set your own fees and pairing. The original token's identity is not reused.</p>
             <div class="field"><label for="f-name">Token name</label>
               <input id="f-name" type="text" maxlength="32" autocomplete="off" placeholder="Salt Lantern">
               <p class="err" id="e-name" hidden></p></div>
@@ -297,6 +334,18 @@ input[type="file"] { width: 100%; font-size: 13px; color: var(--muted); }
             <div class="vest">
               <label class="check" for="f-vest"><input id="f-vest" type="checkbox" checked> Vest creator allocation</label>
               <select id="f-vestd" aria-label="Vesting period"><option value="30">30 days</option><option value="60" selected>60 days</option><option value="90">90 days</option></select>
+            </div>
+            <div class="vamp" id="vamp" hidden>
+              <h4 class="vh">Holder offer</h4>
+              <p class="hint small">Holders of the original token can opt in to claim a bonus pool of your new token. Nobody is sent tokens without claiming, and the original token is not touched.</p>
+              <div class="two">
+                <div class="field"><label for="f-bonus">Holder bonus <output id="o-bonus">5%</output></label>
+                  <input id="f-bonus" type="range" min="0" max="15" step="1" value="5"></div>
+                <div class="field"><label for="f-claim">Claim window</label>
+                  <select id="f-claim"><option value="7">7 days</option><option value="14" selected>14 days</option><option value="30">30 days</option></select></div>
+              </div>
+              <p class="hint small">Bonus tokens left unclaimed after the window are burned, not returned to the creator.</p>
+              <div class="cmp" id="cmp" role="table" aria-label="Original token terms against your terms"></div>
             </div>
             <p class="credit" id="credit"></p>
             <button type="submit" class="go-btn">Stage launch</button>

@@ -29,6 +29,7 @@ npm run config    # builds the curve and creates the config
 npm run pool      # launches a test token (--name, --symbol, --uri to change it)
 npm run buy       # buys 1 SOL at a time until the curve is full (--step, --max)
 npm run migrate
+npm run claim     # shows fees earned on the curve and claims the platform and creator shares
 ```
 
 Use a launch sheet from the page: stage a launch, press **Copy settings**, save it as `launch-sheet.json`, then run `npm run config -- --sheet ../launch-sheet.json`.
@@ -48,7 +49,7 @@ State (config, pool, token mint) is saved in `devnet/state.json`. Keys are in `d
 
 ## Not done yet
 
-- Fee claiming (partner and creator) script.
+- Fees earned after migration (they come from the DAMM v2 pool's locked liquidity, not the curve).
 - Vesting test.
 - Migration needs the devnet DAMM v2 config address, which I did not find in the docs I read.
 - A mainnet review. Do not point any of this at mainnet.

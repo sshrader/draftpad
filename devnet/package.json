@@ -9,7 +9,8 @@
     "config": "node 01-create-config.mjs",
     "pool": "node 02-create-pool.mjs",
     "buy": "node 03-buy.mjs",
-    "migrate": "node 04-migrate.mjs"
+    "migrate": "node 04-migrate.mjs",
+    "claim": "node 05-claim-fees.mjs"
   },
   "engines": { "node": ">=20" },
   "dependencies": {

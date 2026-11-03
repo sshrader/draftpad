@@ -197,7 +197,7 @@ function fakeChain(o) {
           getPoolConfig: async () => ({ migrationQuoteThreshold: new BN(opt.need), activationType: 'Timestamp' })
         };
         this.pool = {
-          swapQuote2: p => { seen.quotes.push(p); return { minimumAmountOut: new BN(777) }; },
+          swapQuote2: p => { if (opt.quoteThrows) throw new TypeError("Cannot read properties of undefined (reading 'quoteReserve')"); seen.quotes.push(p); return { minimumAmountOut: new BN(777) }; },
           swap2: async p => { seen.swaps.push(p); return { serialize() { return Buffer.from('SWAP-BYTES'); } }; }
         };
       }
@@ -312,4 +312,14 @@ test('server: status, pool and buy routes', async () => {
     assert.equal((await fetch(base + '/api/launch/pool?address=' + POOL)).status, 503);
     assert.equal((await fetch(base + '/api/launch/buy', { method: 'POST', body: '{}' })).status, 503);
   });
+});
+
+test('buy still goes out with no minimum when the SDK quote throws, and says so in the log', async () => {
+  const logs = [];
+  const chain = fakeChain({ raised: 0, quoteThrows: true });
+  const l = createLauncher({ presets: PRESETS, logger: { log() {}, error: m => logs.push(m) }, load: chain.load, maxPerMinute: 1000 });
+  const ok = await l.buy(buyBody(), ctx);
+  assert.equal(ok.status, 200);
+  assert.equal(chain.seen.swaps[0].minimumAmountOut.toString(), '0');
+  assert.ok(logs.some(m => /quote failed/.test(m) && /quoteReserve/.test(m)));
 });

@@ -220,18 +220,22 @@ function createLauncher(opts) {
       // refuses mainnet. Revisit it before any mainnet use.
       const crossing = r.need - r.raised < lamports * 1.2;
       const swapMode = crossing ? r.sdk.SwapMode.PartialFill : r.sdk.SwapMode.ExactIn;
-      let minimumAmountOut;
-      if (crossing) {
-        minimumAmountOut = new r.BN(0);
-      } else {
-        const currentPoint = r.cfg.activationType === r.sdk.ActivationType.Slot
-          ? new r.BN(await r.connection.getSlot())
-          : new r.BN(Math.floor(Date.now() / 1000));
-        const quote = r.dbc.pool.swapQuote2({
-          virtualPool: r.v, config: r.cfg, swapBaseForQuote: false, swapMode, amountIn, slippageBps: 300,
-          hasReferral: false, eligibleForFirstSwapWithMinFee: false, currentPoint
-        });
-        minimumAmountOut = quote.minimumAmountOut;
+      let minimumAmountOut = new r.BN(0);
+      if (!crossing) {
+        // The SDK's quote has thrown inside its own code on devnet pools. It only sets a safety minimum,
+        // so on devnet a failed quote falls back to no minimum and is logged. Revisit before mainnet.
+        try {
+          const currentPoint = r.cfg.activationType === r.sdk.ActivationType.Slot
+            ? new r.BN(await r.connection.getSlot())
+            : new r.BN(Math.floor(Date.now() / 1000));
+          const quote = r.dbc.pool.swapQuote2({
+            virtualPool: r.v, config: r.cfg, swapBaseForQuote: false, swapMode, amountIn, slippageBps: 300,
+            hasReferral: false, eligibleForFirstSwapWithMinFee: false, currentPoint
+          });
+          minimumAmountOut = quote.minimumAmountOut;
+        } catch (qerr) {
+          logger.error('Launch buy quote failed, sending with no minimum: ' + (qerr && qerr.stack ? qerr.stack : qerr));
+        }
       }
       const tx = await r.dbc.pool.swap2({
         owner: buyerPk, payer: buyerPk, pool: r.poolPk, swapBaseForQuote: false, swapMode, amountIn,
@@ -248,7 +252,7 @@ function createLauncher(opts) {
         }
       };
     } catch (err) {
-      logger.error('Launch buy failed: ' + (err && err.message ? err.message : 'unknown error'));
+      logger.error('Launch buy failed: ' + (err && err.stack ? err.stack : 'unknown error'));
       return { status: 502, body: { error: 'prepare_failed' } };
     }
   }
